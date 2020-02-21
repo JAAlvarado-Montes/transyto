@@ -20,7 +20,7 @@ Tránsito
 .. |doi-badge| image:: https://zenodo.org/badge/DOI/10.5281/zenodo.1181928.svg
               :target: https://docs.lightkurve.org/about/citing.html             
 
-**transito** is a community-developed, open-source Python package which offers a beautiful and user-friendly way
+**Tránsito** is a community-developed, open-source Python package which offers a beautiful and user-friendly way
 to analyze astronomical flux time series data.
 
 .. image:: https://raw.githubusercontent.com/KeplerGO/lightkurve/master/docs/source/_static/images/lightkurve-teaser.gif
