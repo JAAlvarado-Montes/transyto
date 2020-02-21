@@ -21,7 +21,7 @@ Tránsito
               :target: https://docs.lightkurve.org/about/citing.html             
 
 **Tránsito** is a community-developed, open-source Python package which offers a simple and user-friendly way
-to analyze astronomical flux time series data.
+to analyse astronomical flux time series data.
 
 .. image:: https://raw.githubusercontent.com/KeplerGO/lightkurve/master/docs/source/_static/images/lightkurve-teaser.gif
 
