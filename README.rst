@@ -60,4 +60,4 @@ Please read the citation instructions at `https:// <https://>`_.
 Contact
 -------
 transito is an open source community project created by `the authors <AUTHORS.rst>`_.
-The best way to contact us is to `open an issue <https://>`_ or to e-mail  jaime-andres.alvarado-montes@hdr.mq.edu.au.
+The best way to contact us is to `open an issue <https://github.com/JAAlvarado-Montes/transito/issues/new>`_ or to e-mail  jaime-andres.alvarado-montes@hdr.mq.edu.au.
