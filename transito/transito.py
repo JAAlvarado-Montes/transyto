@@ -88,7 +88,7 @@ class TimeSeriesData:
         self.binsize = 4
 
         # Name of the pipeline
-        self.name_pipeline = os.path.basename(__file__).replace(".py","")
+        self.name_pipeline = os.path.basename(PACKAGEDIR)
 
         # Output directory for logs
         logs_dir = self.data_directory + "logs_photometry"
