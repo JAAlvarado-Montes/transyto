@@ -53,7 +53,7 @@ Please read the  guidelines at `https:// <https://>`_.
 Citing
 ------
 
-If you find transito useful in your research, please cite it and give us a GitHub star!
+If you find Tránsito useful in your research, please cite it and give us a GitHub star!
 Please read the citation instructions at `https:// <https://>`_.
 
 
