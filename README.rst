@@ -1,4 +1,4 @@
-transito
+Transito
 ==========
 
 **A friendly-user package for time series analysis in Python.**
