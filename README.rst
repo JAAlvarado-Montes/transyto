@@ -1,9 +1,9 @@
-Lightkurve
+transito
 ==========
 
-**A friendly package for Kepler & TESS time series analysis in Python.**
+**A friendly-user package for time series analysis in Python.**
 
-**Documentation: https://docs.lightkurve.org**
+**Documentation: https://**
 
 |test-badge| |conda-badge| |pypi-badge| |pypi-downloads| |doi-badge| |astropy-badge|
 
