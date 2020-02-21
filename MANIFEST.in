@@ -1,0 +1,4 @@
+include README.rst AUTHORS.rst CHANGES.rst CONTRIBUTING.rst LICENSE CITATION
+include requirements.txt
+include transito/data/*
+include transito/tests/data/*
