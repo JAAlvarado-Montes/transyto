@@ -33,7 +33,7 @@ setup(name='transito',
       description="A package for time series analysis "
                   "in Python.",
       long_description=open('README.rst').read(),
-      author='Jaime Andres',
+      author='Jaime Andrés Alvarado Montes',
       author_email='jaime-andres.alvarado-montes@hdr.mq.edu.au',
       url='https://docs.lightkurve.org',
       license='MIT',
