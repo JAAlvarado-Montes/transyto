@@ -1,7 +1,7 @@
 Tránsito
 ==========
 
-**A friendly-user package for doing time series photometry using Python.**
+**A friendly-user package for doing time series photometry with Python.**
 
 **Documentation: https://**
 
