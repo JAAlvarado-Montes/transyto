@@ -86,7 +86,7 @@ class TimeSeriesData:
         self.r_out = aperture_radius * 2.2
 
         # Centroid parameter
-        self.box_w = centroid_box_width
+        self.box_width = centroid_box_width
 
         # Data bin
         self.binsize = 4
@@ -146,6 +146,18 @@ class TimeSeriesData:
             kw_list = TESS
 
         return kw_list
+
+    def _slice_data(self, data, origin, width):
+        y, x = origin
+        cutout = data[np.int(x) - width // 2:np.int(x) + width // 2,
+                      np.int(y) - width // 2:np.int(y) + width // 2]
+        return cutout
+
+    def _mask_data(self, image, sigma=1.0):
+        threshold = np.median(image - (sigma * np.std(image)))
+        masked_image = ma.masked_values(image, threshold)
+
+        return masked_image
 
     def get_keyword_value(self, default=None):
         """Returns a header keyword value.
@@ -306,25 +318,21 @@ class TimeSeriesData:
             if wcs.is_celestial:
 
                 # Star pixel positions in the image
-                y, x = wcs.all_world2pix(star.ra, star.dec, 0)
+                center_yx = wcs.all_world2pix(star.ra, star.dec, 0)
 
-                if self.r_out > self.box_w:
+                if self.r_out > self.box_width:
                     logger.debug("Out of box. Choose a smaller outer radius.")
                     break
 
-                sub_image = data[np.int(x) - self.box_w:np.int(x) + self.box_w,
-                                 np.int(y) - self.box_w:np.int(y) + self.box_w]
+                sliced_data = self._slice_data(data, center_yx, self.box_width)
 
-                sigma = 1.0
-                threshold = np.median(sub_image
-                                      - (sigma * np.std(sub_image)))
-                sub_image_cen = ma.masked_values(sub_image, threshold)
+                masked_data = self._mask_data(sliced_data)
 
                 with warnings.catch_warnings():
                     # Ignore warning for the centroid_2dg function
                     warnings.simplefilter('ignore', category=UserWarning)
-                    x_cen, y_cen = centroid_2dg(sub_image_cen,
-                                                mask=sub_image_cen.mask)
+                    x_cen, y_cen = centroid_2dg(masked_data,
+                                                mask=masked_data.mask)
 
                 # Exposure time
                 exptimes.append(self.exptime * 24 * 60 * 60)
@@ -334,7 +342,7 @@ class TimeSeriesData:
 
                 # Sum of counts inside aperture
                 (counts_in_aperture,
-                 bkg_in_object) = self.make_aperture(sub_image,
+                 bkg_in_object) = self.make_aperture(sliced_data,
                                                      (x_cen, y_cen),
                                                      radius=self.r,
                                                      r_in=self.r_in,
@@ -342,8 +350,8 @@ class TimeSeriesData:
 
                 object_counts.append(counts_in_aperture)
                 background_in_object.append(bkg_in_object)
-                x_pos.append(x)
-                y_pos.append(y)
+                x_pos.append(center_yx[1])
+                y_pos.append(center_yx[0])
                 times.append(time)
                 self.good_frames_list.append(fn)
             else:
