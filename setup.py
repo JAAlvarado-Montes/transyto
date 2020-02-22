@@ -18,19 +18,20 @@ exec(open('transito/version.py').read())
 with open('requirements.txt') as f:
     install_requires = f.read().splitlines()
 # 2. What dependencies required to run the unit tests? (i.e. `pytest --remote-data`)
-tests_require = ['pytest', 'pytest-cov', 'pytest-remotedata', 'codecov', 'pytest-doctestplus', 'codacy-coverage']
+tests_require = ['pytest', 'pytest-cov', 'pytest-remotedata', 'codecov',
+                 'pytest-doctestplus', 'codacy-coverage']
 # 3. What dependencies are required for optional features?
 # `BoxLeastSquaresPeriodogram` requires astropy>=3.1.
 # `interact()` requires bokeh>=1.0, ipython.
 # `PLDCorrector` requires pybind11, celerite.
-extras_require = {"all":  ["astropy>=3.1",
+extras_require = {"all": ["astropy>=3.1",
                            "bokeh>=1.0", "ipython",
                            "pybind11", "celerite"],
                   "test": tests_require}
 
 setup(name='transito',
       version=__version__,
-      description="A package for time series analysis "
+      description="A package for time series photometry "
                   "in Python.",
       long_description=open('README.rst').read(),
       author='Jaime Andrés Alvarado Montes',
