@@ -305,7 +305,7 @@ class TimeSeriesData:
             # Check if WCS exist in image
             if wcs.is_celestial:
 
-                # Star positions in the image
+                # Star pixel positions in the image
                 y, x = wcs.all_world2pix(star.ra, star.dec, 0)
 
                 if self.r_out > self.box_w:
