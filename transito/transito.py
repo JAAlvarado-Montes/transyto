@@ -14,14 +14,18 @@ import matplotlib.ticker as plticker
 
 from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
-from astropy.time import Time
+# from astropy.time import Time
 from astropy.io import fits
 from astropy.stats import sigma_clipped_stats
 from astropy.stats import sigma_clip
+# from astropy.io.fits import Undefined
+
 
 from collections import namedtuple
+from pathlib import Path
+from operator import itemgetter
 from wotan import flatten, t14
-from datetime import datetime
+# from datetime import datetime
 from matplotlib import pyplot as plt
 from matplotlib import dates
 
@@ -87,9 +91,6 @@ class TimeSeriesData:
         # Data bin
         self.binsize = 4
 
-        # Name of the pipeline
-        self.name_pipeline = os.path.basename(PACKAGEDIR)
-
         # Output directory for logs
         logs_dir = self.data_directory + "logs_photometry"
         os.makedirs(logs_dir, exist_ok=True)
@@ -97,10 +98,72 @@ class TimeSeriesData:
         logger.addHandler(logging.FileHandler(filename=os.path.join(logs_dir,
                                               'photometry.log'), mode='w'))
 
-        logger.info(pyfiglet.figlet_format("-*-*-*-\n{}\n-*-*-*-".format(self.name_pipeline)))
+        logger.info(pyfiglet.figlet_format("-*-*-*-\n{}\n-*-*-*-".format(self.pipeline)))
 
         logger.info("{} will use {} reference stars for the photometry\n".
-                    format(self.name_pipeline, len(self.list_reference_stars)))
+                    format(self.pipeline, len(self.list_reference_stars)))
+
+    @property
+    def pipeline(self):
+        return os.path.basename(PACKAGEDIR)
+
+    @property
+    def readout(self):
+        return self.get_keyword_value().readout
+
+    @property
+    def obs_time(self):
+        return self.get_keyword_value().obstime
+
+    @property
+    def exptime(self):
+        return self.get_keyword_value().exp
+
+    @property
+    def instrument(self):
+        return self.get_keyword_value().instr
+
+    @property
+    def gain(self):
+        return self.get_keyword_value().gain
+
+    @property
+    def keyword_list(self, telescope="TESS"):
+        file = str(Path(__file__).parents[1]) + "/" + "telescope_keywords.csv"
+
+        (Huntsman,
+         TESS,
+         WASP,
+         MEARTH,
+         POCS) = np.loadtxt(file, skiprows=2,
+                            delimiter=";", dtype=str,
+                            usecols=(1, 2, 3, 4, 5),
+                            unpack=True)
+
+        if telescope == "Huntsman":
+            kw_list = Huntsman
+        elif telescope == "TESS":
+            kw_list = TESS
+
+        return kw_list
+
+    def get_keyword_value(self, default=None):
+        """Returns a header keyword value.
+
+        If the keyword is Undefined or does not exist,
+        then return ``default`` instead.
+        """
+
+        try:
+            kw_values = itemgetter(*self.keyword_list)(self.header)
+        except KeyError:
+            logger.error("Header keyword does not exist")
+            return default
+        exp, obstime, instr, readout, gain = kw_values
+
+        Outputs = namedtuple("Outputs", "exp obstime instr readout gain")
+
+        return Outputs(exp, obstime, instr, readout, gain)
 
     def make_aperture(self, data, coordinates, radius, r_in, r_out,
                       method="exact", subpixels=10):
@@ -176,10 +239,6 @@ class TimeSeriesData:
 
         assert phot_table["aperture_sum_0"] > phot_table["background_in_target"]
 
-        # Readout noitse which depends on the area of the aperture
-        read_out = self.header["READNOIA"]
-        readout_noise = read_out**2 * target_apertures.area
-
         object_final_counts = phot_table["aperture_sum_0"] - background_in_target
 
         # For consistent outputs in table
@@ -189,7 +248,7 @@ class TimeSeriesData:
         logger.info(phot_table["target_aperture_bkg_subtracted"])
 
         return (phot_table["target_aperture_bkg_subtracted"].item(),
-                phot_table["background_in_target"].item(), readout_noise)
+                phot_table["background_in_target"].item())
 
     # @logged
     def get_star_data(self, star_id, data_directory, search_pattern):
@@ -218,20 +277,19 @@ class TimeSeriesData:
         fits_files = search_files_across_directories(data_directory,
                                                      search_pattern)
 
-        # List of ADU counts for the source, background, and readout noise
+        # List of ADU counts for the source, background
         object_counts = list()
         background_in_object = list()
-        readout_noise = list()
 
         # List of exposure times
-        exp_times = list()
+        exptimes = list()
 
         # List of object positions
         x_pos = list()
         y_pos = list()
 
         # Observation dates list
-        observation_dates = list()
+        times = list()
 
         # List of good frames
         self.good_frames_list = list()
@@ -243,9 +301,6 @@ class TimeSeriesData:
                 ext = 1
             data, self.header = fits.getdata(fn, header=True, ext=ext)
             wcs = WCS(self.header)
-
-            # Get the camera name
-            self.camera = self.header["INSTRUME"]
 
             # Check if WCS exist in image
             if wcs.is_celestial:
@@ -272,32 +327,30 @@ class TimeSeriesData:
                                                 mask=sub_image_cen.mask)
 
                 # Exposure time
-                exp_times.append(self.header["TELAPSE"] * 24 * 60 * 60)
+                exptimes.append(self.exptime * 24 * 60 * 60)
 
-                # Observation dates
-                obs_dates = self.header["TSTART"]
+                # Observation times
+                time = self.obs_time
 
                 # Sum of counts inside aperture
                 (counts_in_aperture,
-                 bkg_in_object,
-                 readout_aperture) = self.make_aperture(sub_image,
-                                                        (x_cen, y_cen),
-                                                        radius=self.r,
-                                                        r_in=self.r_in,
-                                                        r_out=self.r_out)
+                 bkg_in_object) = self.make_aperture(sub_image,
+                                                     (x_cen, y_cen),
+                                                     radius=self.r,
+                                                     r_in=self.r_in,
+                                                     r_out=self.r_out)
 
                 object_counts.append(counts_in_aperture)
                 background_in_object.append(bkg_in_object)
-                readout_noise.append(readout_aperture)
                 x_pos.append(x)
                 y_pos.append(y)
-                observation_dates.append(obs_dates)
+                times.append(time)
                 self.good_frames_list.append(fn)
             else:
                 continue
 
-        return (object_counts, background_in_object, readout_noise,
-                exp_times, x_pos, y_pos, observation_dates)
+        return (object_counts, background_in_object,
+                exptimes, x_pos, y_pos, times)
 
     # @logged
     def do_photometry(self,
@@ -334,12 +387,11 @@ class TimeSeriesData:
         """
         start = time.time()
 
-        logger.warning(f"Starting aperture photometry for {self.star_id}\n")
+        logger.info(f"Starting aperture photometry for {self.star_id}\n")
 
         # Get flux of target star
         (target_flux,
          background_in_object,
-         readout_noise_target,
          exptimes,
          x_pos_target,
          y_pos_target,
@@ -362,13 +414,14 @@ class TimeSeriesData:
         target_flux = np.asarray(target_flux)
         self.target_flux_sec = target_flux / exptimes
         background_in_target_sec = np.asarray(background_in_object) / exptimes
-        readout_noise_target = np.asarray(readout_noise_target)
 
         # CCD gain
-        ccd_gain = self.header["GAINA"]
+        ccd_gain = self.gain
+
+        readout_noise = (self.readout * self.r)**2 * np.pi * np.ones(len(self.good_frames_list))
 
         # Sigma readout noise
-        ron = np.sqrt(readout_noise_target)
+        ron = np.sqrt(readout_noise)
         self.sigma_ron = -2.5 * np.log10((self.target_flux_sec * ccd_gain * exptimes - ron)
                                          / (self.target_flux_sec * ccd_gain * exptimes))
 
@@ -392,7 +445,7 @@ class TimeSeriesData:
         # Signal to noise: shot, sky noise (per second) and readout
         S_to_N_obj_sec = self.target_flux_sec / np.sqrt(self.target_flux_sec
                                                         + background_in_target_sec
-                                                        + readout_noise_target
+                                                        + readout_noise
                                                         / (ccd_gain * exptimes))
         # Convert SN_sec to actual SN
         S_to_N_obj = S_to_N_obj_sec * np.sqrt(ccd_gain * exptimes)
@@ -406,7 +459,6 @@ class TimeSeriesData:
 
             (refer_flux,
              background_in_ref_star,
-             readout_noise_ref,
              exptimes_ref,
              x_pos_ref,
              y_pos_ref,
@@ -422,7 +474,7 @@ class TimeSeriesData:
 
         sigma_squared_ref = (self.reference_star_flux_sec * exptimes
                              + background_in_ref_star_sec * exptimes
-                             + readout_noise_ref)
+                             + readout_noise)
 
         weights_ref_stars = 1.0 / sigma_squared_ref
 
@@ -439,7 +491,7 @@ class TimeSeriesData:
         # S/N for reference star per second
         S_to_N_ref_sec = total_reference_flux_sec / np.sqrt(total_reference_flux_sec
                                                             + total_reference_bkg_sec
-                                                            + readout_noise_ref
+                                                            + readout_noise
                                                             / (ccd_gain * exptimes))
         # Convert S/N per sec for ensemble to total S/N
         S_to_N_ref = S_to_N_ref_sec * np.sqrt(ccd_gain * exptimes)
@@ -460,7 +512,7 @@ class TimeSeriesData:
         # Print when all of the analysis ends
         logger.info(f"Differential photometry of {self.star_id} has been finished, "
                     f"with {len(self.good_frames_list)} frames "
-                    f"of camera {self.camera} (run time: {exec_time:.3f} sec)\n")
+                    f"of camera {self.instrument} (run time: {exec_time:.3f} sec)\n")
 
         # Neglect outliers in the timeseries: create mask
         self.clipped_values_mask = sigma_clip(self.normalized_flux, sigma=10,
@@ -507,7 +559,7 @@ class TimeSeriesData:
 
             # File with rms information
             file_rms_name = os.path.join(output_directory,
-                                         f"rms_{self.camera}.txt")
+                                         f"rms_{self.instrument}.txt")
 
             with open(file_rms_name, "a") as file:
                 file.write(f"{self.r} {self.std} {self.std_binned} "
@@ -526,25 +578,23 @@ class TimeSeriesData:
         """
         pd.plotting.register_matplotlib_converters()
 
-        # Exposure time
-        exp = self.header["TELAPSE"]
-
-        nbin_tot = exp * self.binsize
+        # Total time for binsize
+        nbin_tot = self.exptime * self.binsize
 
         # Output directory for lightcurves
         lightcurves_directory = self.data_directory + self.output_dir_name
 
         # lightcurve name
         lightcurve_name = os.path.join(lightcurves_directory, "Lightcurve_camera_"
-                                       f"{self.camera}_r{self.r}.png")
+                                       f"{self.instrument}_r{self.r}.png")
 
         fig, ax = plt.subplots(4, 1,
                                sharey="row", sharex="col", figsize=(10, 10))
-        fig.suptitle(f"Differential Photometry\nTarget Star {self.star_id}"" ($m_\mathrm{V}=10.9$), "
+        fig.suptitle(f"Differential Photometry\nTarget Star {self.star_id}, "
                      f"Aperture Radius = {self.r} pix", fontsize=13)
 
         ax[3].plot(self.times_clipped, self.normalized_flux, "k.", ms=3,
-                   label=f"NBin = {exp:.3f} d, std = {self.std:.2%}")
+                   label=f"NBin = {self.exptime:.3f} d, std = {self.std:.2%}")
         ax[3].plot(self.binned_dates, self.binned_data, "ro", ms=4,
                    label=f"NBin = {nbin_tot:.3f} d, std = {self.std_binned:.2%}")
         # ax[3].errorbar(self.times, self.normalized_flux, yerr=self.sigma_total,
@@ -577,7 +627,7 @@ class TimeSeriesData:
                    label="dy [RA axis]", lw=0.5, ms=1.2)
         ax[0].set_ylabel(r"$\Delta$ Pixel", fontsize=13)
         ax[0].legend(fontsize=8.6, loc="lower left", ncol=2, framealpha=1.0)
-        ax[0].set_title(f"Sector 2,  G Band Filter, Camera: {self.camera}", fontsize=13)
+        ax[0].set_title(f"Camera: {self.instrument}", fontsize=13)
 
         for counter in range(len(self.list_reference_stars)):
             # ax[1].xaxis.set_major_formatter(dates.DateFormatter("%H:%M:%S"))
@@ -619,7 +669,7 @@ class TimeSeriesData:
                                sharey="row", sharex="col", figsize=(13, 10))
         fig.suptitle(f"Evolution of Noise Sources for the Target Star {self.star_id} "
                      "($m_\mathrm{V}=10.9$)\n"
-                     f"Huntsman Defocused Camera {self.camera}, G Band Filter\n"
+                     f"Huntsman Defocused Camera {self.instrument}, G Band Filter\n"
                      f"Sector 2", fontsize=15)
         ax.plot_date(self.times, self.sigma_total * 100, "k-",
                      label="$\sigma_{\mathrm{total}}$")
@@ -640,15 +690,3 @@ class TimeSeriesData:
         ax.xaxis.set_major_formatter(dates.DateFormatter("%H:%M:%S"))
         plt.grid(alpha=0.4)
         fig.savefig("noises.png")
-
-
-# class LightCurve(TimeSeriesData):
-#     lightcurve = TimeSeriesData.do_photometry(make_lightcurve=True,
-#                                                       save_rms=True,
-#                                                       detrend_data=True,
-#                                                       R_star=2.341,
-#                                                       M_star=1.257,
-#                                                       Porb=11.5366)
-
-#     def to_lightcurve():
-#         pass

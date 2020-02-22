@@ -1,0 +1,7 @@
+;Telescope;;;;
+;Huntsman;TESS;WASP;MEARTH;POCS
+Exposure time;EXPTIME;TELAPSE;;;
+Observation date;DATE-OBS;TSTART;;;
+Instrument;INSTRUME;INSTRUME;;;
+Readout;READOUT;READNOIA;;;
+Gain;EGAIN;GAINA;;;
