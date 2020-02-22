@@ -54,8 +54,7 @@ class TimeSeriesData:
                  data_directory,
                  search_pattern,
                  list_reference_stars,
-                 aperture_radius,
-                 centroid_box_width):
+                 aperture_radius):
         """Initialize class Photometry for a given target and reference stars.
 
         Parameters
@@ -70,8 +69,6 @@ class TimeSeriesData:
             Reference stars to be used in aperture photometry.
         aperture_radius : float
             Radius of the inner circular perture.
-        centroid_box_width : float
-            Width of the box to perform the centroid function.
         """
 
         # Positional Arguments
@@ -85,8 +82,8 @@ class TimeSeriesData:
         self.r_in = aperture_radius * 1.6
         self.r_out = aperture_radius * 2.2
 
-        # Centroid parameter
-        self.box_width = centroid_box_width
+        # Centroid bow width for centroid function.
+        self.box_width = 2 * (self.r + 1)
 
         # Data bin
         self.binsize = 4
@@ -149,8 +146,8 @@ class TimeSeriesData:
 
     def _slice_data(self, data, origin, width):
         y, x = origin
-        cutout = data[np.int(x) - width // 2:np.int(x) + width // 2,
-                      np.int(y) - width // 2:np.int(y) + width // 2]
+        cutout = data[np.int(x - width / 2):np.int(x + width / 2),
+                      np.int(y - width / 2):np.int(y + width / 2)]
         return cutout
 
     def _mask_data(self, image, sigma=1.0):
@@ -320,10 +317,6 @@ class TimeSeriesData:
                 # Star pixel positions in the image
                 center_yx = wcs.all_world2pix(star.ra, star.dec, 0)
 
-                if self.r_out > self.box_width:
-                    logger.debug("Out of box. Choose a smaller outer radius.")
-                    break
-
                 sliced_data = self._slice_data(data, center_yx, self.box_width)
 
                 masked_data = self._mask_data(sliced_data)
@@ -331,8 +324,26 @@ class TimeSeriesData:
                 with warnings.catch_warnings():
                     # Ignore warning for the centroid_2dg function
                     warnings.simplefilter('ignore', category=UserWarning)
-                    x_cen, y_cen = centroid_2dg(masked_data,
+                    x_cen, y_cen = centroid_2dg(sliced_data,
                                                 mask=masked_data.mask)
+                    shift_y = self.box_width / 2 - y_cen
+                    shift_x = self.box_width / 2 - x_cen
+
+                    if shift_y < 0 and shift_x < 0:
+                        new_y = center_yx[0] + np.abs(shift_y)
+                        new_x = center_yx[1] + np.abs(shift_x)
+                    if shift_y > 0 and shift_x > 0:
+                        new_y = center_yx[0] - shift_y
+                        new_x = center_yx[1] - shift_x
+                    if shift_y < 0 and shift_x > 0:
+                        new_y = center_yx[0] + np.abs(shift_y)
+                        new_x = center_yx[1] - shift_x
+                    if shift_y > 0 and shift_x < 0:
+                        new_y = center_yx[0] - shift_y
+                        new_x = center_yx[1] + np.abs(shift_x)
+                    else:
+                        new_y = center_yx[0]
+                        new_x = center_yx[1]
 
                 # Exposure time
                 exptimes.append(self.exptime * 24 * 60 * 60)
@@ -342,8 +353,8 @@ class TimeSeriesData:
 
                 # Sum of counts inside aperture
                 (counts_in_aperture,
-                 bkg_in_object) = self.make_aperture(sliced_data,
-                                                     (x_cen, y_cen),
+                 bkg_in_object) = self.make_aperture(data,
+                                                     (new_y, new_x),
                                                      radius=self.r,
                                                      r_in=self.r_in,
                                                      r_out=self.r_out)

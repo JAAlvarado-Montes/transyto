@@ -36,7 +36,7 @@ setup(name='transito',
       long_description=open('README.rst').read(),
       author='Jaime Andrés Alvarado Montes',
       author_email='jaime-andres.alvarado-montes@hdr.mq.edu.au',
-      url='https://docs.lightkurve.org',
+      url='https://github.com/JAAlvarado-Montes/transito',
       license='MIT',
       package_dir={
             'transito': 'transito'},
