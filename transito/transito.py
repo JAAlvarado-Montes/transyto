@@ -634,11 +634,7 @@ class TimeSeriesData:
                            f"{np.nanmedian(S_to_N_obj)} {np.nanmedian(S_to_N_ref)} "
                            f"{np.nanmedian(S_to_N_diff)}\n")
 
-        Outputs = namedtuple("Outputs",
-                             "target_flux_sec total_ref_flux_sec sigma_error times")
-
-        return Outputs(self.target_flux_sec, total_reference_flux_sec,
-                       self.sigma_total, self.times)
+        return (self.times, self.target_flux_sec, self.sigma_total)
 
 
 class LightCurve(TimeSeriesData):
@@ -659,7 +655,7 @@ class LightCurve(TimeSeriesData):
         """
         pd.plotting.register_matplotlib_converters()
 
-        self.initialize_analysis()
+        # self.initialize_analysis()
 
         # Total time for binsize
         nbin_tot = self.exptime * self.binsize
