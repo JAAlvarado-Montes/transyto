@@ -54,7 +54,8 @@ class TimeSeriesData:
                  data_directory,
                  search_pattern,
                  list_reference_stars,
-                 aperture_radius):
+                 aperture_radius,
+                 telescope="TESS"):
         """Initialize class Photometry for a given target and reference stars.
 
         Parameters
@@ -76,6 +77,7 @@ class TimeSeriesData:
         self.data_directory = data_directory
         self.search_pattern = search_pattern
         self.list_reference_stars = list_reference_stars
+        self.telescope = telescope
 
         # Aperture parameters
         self.r = aperture_radius
@@ -125,8 +127,10 @@ class TimeSeriesData:
         return self.get_keyword_value().gain
 
     @property
-    def keyword_list(self, telescope="TESS"):
+    def keyword_list(self):
         file = str(Path(__file__).parents[1]) + "/" + "telescope_keywords.csv"
+
+        telescope = self.telescope
 
         (Huntsman,
          TESS,
@@ -326,7 +330,7 @@ class TimeSeriesData:
                 phot_table["background_in_target"].item())
 
     # @logged
-    def get_star_data(self, star_id, data_directory, search_pattern):
+    def do_photometry(self, star_id, data_directory, search_pattern):
         """Get all data from plate-solved images (right ascention,
            declination, airmass, dates, etc). Then, it converts the
            right ascention and declination into image positions to
@@ -388,7 +392,8 @@ class TimeSeriesData:
                 masked_data = self._mask_data(cutout)
 
                 y_cen, x_cen = self.find_centroid(center_yx, cutout,
-                                                  masked_data.mask)
+                                                  masked_data.mask,
+                                                  method="moments")
 
                 # Exposure time
                 exptimes.append(self.exptime * 24 * 60 * 60)
@@ -416,12 +421,12 @@ class TimeSeriesData:
                 exptimes, x_pos, y_pos, times)
 
     # @logged
-    def do_photometry(self,
-                      save_rms=False,
-                      detrend_data=False,
-                      R_star=None,
-                      M_star=None,
-                      Porb=None):
+    def get_relative_flux(self,
+                          save_rms=False,
+                          detrend_data=False,
+                          R_star=None,
+                          M_star=None,
+                          Porb=None):
         """Find the flux of a target star relative to some reference stars,
            using the counts inside an aperture
 
@@ -458,7 +463,7 @@ class TimeSeriesData:
          exptimes,
          x_pos_target,
          y_pos_target,
-         self.times) = self.get_star_data(self.star_id,
+         self.times) = self.do_photometry(self.star_id,
                                           self.data_directory,
                                           self.search_pattern)
 
@@ -525,7 +530,7 @@ class TimeSeriesData:
              exptimes_ref,
              x_pos_ref,
              y_pos_ref,
-             obs_dates) = self.get_star_data(ref_star,
+             obs_dates) = self.do_photometry(ref_star,
                                              self.data_directory,
                                              self.search_pattern)
             self.reference_star_flux_sec.append(np.asarray(refer_flux) / exptimes)
