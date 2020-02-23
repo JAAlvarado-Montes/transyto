@@ -38,7 +38,7 @@ from .utils import (
     search_files_across_directories, bin_dataframe
 )
 
-__all__ = ['TimeSeriesData']
+__all__ = ['TimeSeriesData', 'LightCurve']
 
 # Logger to track activity of the class
 logger = logging.getLogger()
@@ -373,7 +373,7 @@ class TimeSeriesData:
         # List of good frames
         self.good_frames_list = list()
 
-        for fn in fits_files[0:600]:
+        for fn in fits_files[0:6]:
             # Get data, header and WCS of fits files with any extension
             ext = 0
             if fn.endswith(".fz"):
@@ -640,11 +640,26 @@ class TimeSeriesData:
         return Outputs(self.target_flux_sec, total_reference_flux_sec,
                        self.sigma_total, self.times)
 
+
+class LightCurve(TimeSeriesData):
+    def __inti__(self):
+        super().__init__(self)
+
+    def initialize_analysis(self):
+        time_series = self.get_relative_flux(save_rms=True,
+                                             detrend_data=True,
+                                             R_star=2.341,
+                                             M_star=1.257,
+                                             Porb=11.5366)
+        return time_series
+
     # @logged
-    def plot_lightcurve(self):
+    def plot(self):
         """Plot a light curve using the flux time series data.
         """
         pd.plotting.register_matplotlib_converters()
+
+        self.initialize_analysis()
 
         # Total time for binsize
         nbin_tot = self.exptime * self.binsize
