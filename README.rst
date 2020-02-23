@@ -23,7 +23,7 @@ Tránsito
 **Tránsito** is a community-developed, open-source Python package which offers a simple and user-friendly way
 to analyse astronomical flux time series data.
 
-[!Logo](https://raw.githubusercontent.com/JAAlvarado-Montes/transito/develop/docs/source/_static/images/prueba.gif?token=AEKWX4F4SH72N42O7WD6X4S6LNRMA)
+.. Image:: https://raw.githubusercontent.com/JAAlvarado-Montes/transito/develop/docs/source/_static/images/prueba.gif?token=AEKWX4F4SH72N42O7WD6X4S6LNRMA
 
 This package aims at lowering the barrier for students, astronomers,
 and citizen scientists interested in analyzing Kepler and TESS space telescope data.
