@@ -25,7 +25,7 @@ to analyse astronomical flux time series data.
 
 .. image:: https://raw.githubusercontent.com/JAAlvarado-Montes/transito/master/docs/source/_static/images/prueba.png
 
-This package aims to lower the barrier for students, astronomers,
+This package aims at lowering the barrier for students, astronomers,
 and citizen scientists interested in analyzing Kepler and TESS space telescope data.
 It does this by providing **high-quality building blocks and tutorials**
 which enable both hand-tailored data analyses and advanced automated pipelines.
