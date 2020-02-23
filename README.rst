@@ -1,4 +1,4 @@
-Tránsito
+Let's find Tránsito(s)!
 ==========
 
 **A friendly-user package for doing time series photometry with Python.**
