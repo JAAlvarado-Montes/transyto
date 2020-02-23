@@ -31,7 +31,7 @@ from matplotlib import dates
 
 from photutils.aperture.circle import CircularAperture, CircularAnnulus
 from photutils import aperture_photometry
-from photutils import centroid_2dg
+from photutils import centroid_2dg, centroid_1dg, centroid_com
 
 from . import PACKAGEDIR
 from .utils import (
@@ -141,6 +141,12 @@ class TimeSeriesData:
             kw_list = Huntsman
         elif telescope == "TESS":
             kw_list = TESS
+        elif telescope == "WASP":
+            kw_list = WASP
+        elif telescope == "MEARTH":
+            kw_list = MEARTH
+        elif telescope == "POCS":
+            kw_list = POCS
 
         return kw_list
 
@@ -155,6 +161,66 @@ class TimeSeriesData:
         masked_image = ma.masked_values(image, threshold)
 
         return masked_image
+
+    def _estimate_centroid_via_2dgaussian(self, data, mask):
+        """Computes the centroid of a data array using a 2D gaussian
+        from photutils.
+        """
+        x, y = centroid_2dg(data, mask=mask)
+        return x, y
+
+    def _estimate_centroid_via_1dgaussian(self, data, mask):
+        """Computes the centroid of a data array using a 2D gaussian
+        from photutils.
+        """
+        x, y = centroid_1dg(data, mask=mask)
+        return x, y
+
+    def _estimate_centroid_via_moments(self, data, mask):
+        """Computes the centroid of a data array using a 2D gaussian
+        from photutils.
+        """
+        x, y = centroid_com(data, mask=mask)
+        return x, y
+
+    def find_centroid(self, prior_centroid, data, mask, method="2dgaussian"):
+
+        prior_y, prior_x = prior_centroid
+        with warnings.catch_warnings():
+            # Ignore warning for the centroid_2dg function
+            warnings.simplefilter('ignore', category=UserWarning)
+
+            if method == "2dgaussian":
+                x_cen, y_cen = self._estimate_centroid_via_2dgaussian(data,
+                                                                      mask)
+            elif method == "1dgaussian":
+                x_cen, y_cen = self._estimate_centroid_via_1dgaussian(data,
+                                                                      mask)
+
+            elif method == "moments":
+                x_cen, y_cen = self._estimate_centroid_via_moments(data, mask)
+
+            # Compute the shifts in y and x.
+            shift_y = self.box_width / 2 - y_cen
+            shift_x = self.box_width / 2 - x_cen
+
+            if shift_y < 0 and shift_x < 0:
+                new_y = prior_y + np.abs(shift_y)
+                new_x = prior_x + np.abs(shift_x)
+            elif shift_y > 0 and shift_x > 0:
+                new_y = prior_y - shift_y
+                new_x = prior_x - shift_x
+            elif shift_y < 0 and shift_x > 0:
+                new_y = prior_y + np.abs(shift_y)
+                new_x = prior_x - shift_x
+            elif shift_y > 0 and shift_x < 0:
+                new_y = prior_y - shift_y
+                new_x = prior_x + np.abs(shift_x)
+            else:
+                new_y = prior_y
+                new_x = prior_x
+
+            return new_y, new_x
 
     def get_keyword_value(self, default=None):
         """Returns a header keyword value.
@@ -317,33 +383,12 @@ class TimeSeriesData:
                 # Star pixel positions in the image
                 center_yx = wcs.all_world2pix(star.ra, star.dec, 0)
 
-                sliced_data = self._slice_data(data, center_yx, self.box_width)
+                cutout = self._slice_data(data, center_yx, self.box_width)
 
-                masked_data = self._mask_data(sliced_data)
+                masked_data = self._mask_data(cutout)
 
-                with warnings.catch_warnings():
-                    # Ignore warning for the centroid_2dg function
-                    warnings.simplefilter('ignore', category=UserWarning)
-                    x_cen, y_cen = centroid_2dg(sliced_data,
-                                                mask=masked_data.mask)
-                    shift_y = self.box_width / 2 - y_cen
-                    shift_x = self.box_width / 2 - x_cen
-
-                    if shift_y < 0 and shift_x < 0:
-                        new_y = center_yx[0] + np.abs(shift_y)
-                        new_x = center_yx[1] + np.abs(shift_x)
-                    if shift_y > 0 and shift_x > 0:
-                        new_y = center_yx[0] - shift_y
-                        new_x = center_yx[1] - shift_x
-                    if shift_y < 0 and shift_x > 0:
-                        new_y = center_yx[0] + np.abs(shift_y)
-                        new_x = center_yx[1] - shift_x
-                    if shift_y > 0 and shift_x < 0:
-                        new_y = center_yx[0] - shift_y
-                        new_x = center_yx[1] + np.abs(shift_x)
-                    else:
-                        new_y = center_yx[0]
-                        new_x = center_yx[1]
+                y_cen, x_cen = self.find_centroid(center_yx, cutout,
+                                                  masked_data.mask)
 
                 # Exposure time
                 exptimes.append(self.exptime * 24 * 60 * 60)
@@ -353,8 +398,7 @@ class TimeSeriesData:
 
                 # Sum of counts inside aperture
                 (counts_in_aperture,
-                 bkg_in_object) = self.make_aperture(data,
-                                                     (new_y, new_x),
+                 bkg_in_object) = self.make_aperture(data, (y_cen, x_cen),
                                                      radius=self.r,
                                                      r_in=self.r_in,
                                                      r_out=self.r_out)
