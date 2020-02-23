@@ -1,7 +1,7 @@
 Let's find Tránsito(s)!
 ==========
 
-**A friendly-user package for doing time series photometry with Python.**
+**Tránsito is a friendly-user package for doing time series photometry with Python.**
 
 **Documentation: https://**
 
@@ -21,7 +21,7 @@ Let's find Tránsito(s)!
               :target: https://docs.lightkurve.org/about/citing.html             
 
 **Tránsito** is a community-developed, open-source Python package which offers a simple and user-friendly way
-to analyse astronomical flux time series data.
+to analyse astronomical flux time series, with an emphasis in ground-based collected data.
 
 .. Image:: https://raw.githubusercontent.com/JAAlvarado-Montes/transito/develop/docs/source/_static/images/prueba.gif?token=AEKWX4F4SH72N42O7WD6X4S6LNRMA
 
