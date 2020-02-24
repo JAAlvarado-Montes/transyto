@@ -563,22 +563,6 @@ class TimeSeriesData:
                     f"with {len(self.good_frames_list)} frames "
                     f"of camera {self.instrument} (run time: {exec_time:.3f} sec)\n")
 
-        # if detrend_data:
-        #     logger.info("Removing trends from time series data\n")
-        #     # Compute the transit duration
-        #     transit_dur = t14(R_s=R_star, M_s=M_star,
-        #                       P=Porb, small_planet=False)
-
-        #     # Estimate the window length for the detrending
-        #     wl = 3.0 * transit_dur
-
-        #     # Detrend the time series data
-        #     self.normalized_flux, self.lc_trend = flatten(self.times,
-        #                                                   self.normalized_flux,
-        #                                                   return_trend=True,
-        #                                                   method="biweight",
-        #                                                   window_length=wl)
-
         # Output directory
         self.output_dir_name = "TimeSeries_Analysis"
 
