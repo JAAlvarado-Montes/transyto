@@ -1,7 +1,7 @@
-Let's detect Tránsito(s)!
+Let's detect Tránsyto(s)!
 ==========
 
-**Tránsito is a friendly-user package for doing transit photometry with Python.**
+**Tránsyto is a friendly-user package for doing transit photometry with Python.**
 
 **Documentation: https://**
 
@@ -20,7 +20,7 @@ Let's detect Tránsito(s)!
 .. |doi-badge| image:: https://zenodo.org/badge/DOI/10.5281/zenodo.1181928.svg
               :target: https://docs.lightkurve.org/about/citing.html             
 
-**Tránsito** is a community-developed, open-source Python package which offers a simple and user-friendly way
+**Tránsyto** is a community-developed, open-source Python package which offers a simple and user-friendly way
 to analyse astronomical flux time-series data, with an emphasis on ground-based observations.
 
 .. Image:: https://raw.githubusercontent.com/JAAlvarado-Montes/transito/develop/docs/source/_static/images/prueba.gif?token=AEKWX4F4SH72N42O7WD6X4S6LNRMA
@@ -53,11 +53,11 @@ Please read the  guidelines at `https:// <https://>`_.
 Citing
 ------
 
-If you find Tránsito useful in your research, please cite it and give us a GitHub star!
+If you find Tránsyto useful in your research, please cite it and give us a GitHub star!
 Please read the citation instructions at `https:// <https://>`_.
 
 
 Contact
 -------
-Tránsito is an open source community project created by `the authors <AUTHORS.rst>`_.
+Tránsyto is an open source community project created by `the authors <AUTHORS.rst>`_.
 The best way to contact us is to `open an issue <https://github.com/JAAlvarado-Montes/transito/issues/new>`_ or to e-mail  jaime-andres.alvarado-montes@hdr.mq.edu.au.
