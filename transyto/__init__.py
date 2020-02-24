@@ -19,6 +19,6 @@ log = logging.getLogger(__name__)
 log.addHandler(logging.StreamHandler())
 
 from .version import __version__
-from .transito import *
+from .transyto import *
 from .utils import *
 from .wcs import *
