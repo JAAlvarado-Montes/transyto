@@ -35,7 +35,7 @@ from photutils import centroid_2dg, centroid_1dg, centroid_com
 
 from . import PACKAGEDIR
 from .utils import (
-    search_files_across_directories, bin_dataframe
+    search_files_across_directories
 )
 
 __all__ = ['TimeSeriesData', 'LightCurve']
@@ -86,9 +86,6 @@ class TimeSeriesData:
 
         # Centroid bow width for centroid function.
         self.box_width = 2 * (self.r + 1)
-
-        # Data bin
-        self.binsize = 4
 
         # Output directory for logs
         logs_dir = self.data_directory + "logs_photometry"
@@ -373,7 +370,7 @@ class TimeSeriesData:
         # List of good frames
         self.good_frames_list = list()
 
-        for fn in fits_files[0:6]:
+        for fn in fits_files[0:600]:
             # Get data, header and WCS of fits files with any extension
             ext = 0
             if fn.endswith(".fz"):
@@ -421,12 +418,7 @@ class TimeSeriesData:
                 exptimes, x_pos, y_pos, times)
 
     # @logged
-    def get_relative_flux(self,
-                          save_rms=False,
-                          detrend_data=False,
-                          R_star=None,
-                          M_star=None,
-                          Porb=None):
+    def get_relative_flux(self, save_rms=False):
         """Find the flux of a target star relative to some reference stars,
            using the counts inside an aperture
 
@@ -435,17 +427,6 @@ class TimeSeriesData:
         save_rms : bool, optional
             Save a txt file with the rms achieved for each time that
             the class is executed (defaul is False)
-        detrend_data : bool, optional (default is False)
-            If True, detrending of the time series data will be performed
-        R_star : None, optional
-            Radius of the star (in solar units). It has to be specified if
-            detrend_data is True.
-        M_star : None, optional
-            Mass of the star (in solar units). It has to be specified
-            if detrend_data is True.
-        Porb : None, optional
-            Orbital period of the planet (in days). It has to be specified if
-            detrend_data is True.
 
         Returns
         -------
@@ -582,40 +563,21 @@ class TimeSeriesData:
                     f"with {len(self.good_frames_list)} frames "
                     f"of camera {self.instrument} (run time: {exec_time:.3f} sec)\n")
 
-        # Neglect outliers in the timeseries: create mask
-        self.clipped_values_mask = sigma_clip(self.normalized_flux, sigma=10,
-                                              maxiters=10, cenfunc=np.median,
-                                              masked=True, copy=True)
-        self.normalized_flux = self.normalized_flux[~self.clipped_values_mask.mask]
-        self.times_clipped = self.times[~self.clipped_values_mask.mask]
+        # if detrend_data:
+        #     logger.info("Removing trends from time series data\n")
+        #     # Compute the transit duration
+        #     transit_dur = t14(R_s=R_star, M_s=M_star,
+        #                       P=Porb, small_planet=False)
 
-        if detrend_data:
-            logger.info("Removing trends from time series data\n")
-            # Compute the transit duration
-            transit_dur = t14(R_s=R_star, M_s=M_star,
-                              P=Porb, small_planet=False)
+        #     # Estimate the window length for the detrending
+        #     wl = 3.0 * transit_dur
 
-            # Estimate the window length for the detrending
-            wl = 3.0 * transit_dur
-
-            # Detrend the time series data
-            self.normalized_flux, self.lc_trend = flatten(self.times_clipped,
-                                                          self.normalized_flux,
-                                                          return_trend=True,
-                                                          method="biweight",
-                                                          window_length=wl)
-
-        # Standard deviation in ppm for the observation
-        self.std = np.nanstd(self.normalized_flux)
-
-        # Binned data and its standard deviation in ppm
-        self.binned_data = bin_dataframe(self.normalized_flux, self.binsize)
-        self.std_binned = np.nanstd(self.binned_data)
-
-        # Binned times
-        self.binned_dates = bin_dataframe(self.times_clipped,
-                                          self.binsize,
-                                          bin_dates=True)
+        #     # Detrend the time series data
+        #     self.normalized_flux, self.lc_trend = flatten(self.times,
+        #                                                   self.normalized_flux,
+        #                                                   return_trend=True,
+        #                                                   method="biweight",
+        #                                                   window_length=wl)
 
         # Output directory
         self.output_dir_name = "TimeSeries_Analysis"
@@ -638,27 +600,158 @@ class TimeSeriesData:
 
 
 class LightCurve(TimeSeriesData):
-    def __inti__(self):
-        super().__init__(self)
+    def __init__(self,
+                 star_id,
+                 data_directory,
+                 search_pattern,
+                 list_reference_stars,
+                 aperture_radius,
+                 telescope="TESS"):
+        super(LightCurve, self).__init__(star_id=star_id,
+                                         data_directory=data_directory,
+                                         search_pattern=search_pattern,
+                                         list_reference_stars=list_reference_stars,
+                                         aperture_radius=aperture_radius,
+                                         telescope=telescope)
 
     def initialize_analysis(self):
-        time_series = self.get_relative_flux(save_rms=True,
-                                             detrend_data=True,
-                                             R_star=2.341,
-                                             M_star=1.257,
-                                             Porb=11.5366)
+        time_series = self.get_relative_flux(save_rms=False)
         return time_series
 
-    # @logged
-    def plot(self):
-        """Plot a light curve using the flux time series data.
+    def clip_outliers(self, sigma=5.0, sigma_lower=None, sigma_upper=None,
+                      return_mask=False, **kwargs):
+        """ Covenience wrapper for sigma_clip function from astropy.
         """
+
+        clipped_data = sigma_clip(data=self.normalized_flux,
+                                  sigma=sigma, maxiters=10,
+                                  cenfunc=np.median,
+                                  masked=True,
+                                  copy=True)
+
+        mask = clipped_data.mask
+        normalized_flux_clipped = self.normalized_flux[~mask]
+        times_clipped = self.times[~mask]
+
+        if return_mask:
+            return normalized_flux_clipped, times_clipped, mask
+        return normalized_flux_clipped, times_clipped
+
+    def detrend_timeseries(self, times, flux, R_star=None,
+                           M_star=None, Porb=None):
+        """Detrend time-series data
+
+        Parameters
+        ----------
+        times : array
+            Times of the observation
+        flux : array
+            Flux with trend to be removed
+        R_star : None, optional
+            Radius of the star (in solar units). It has to be specified if
+            detrend_data is True.
+        M_star : None, optional
+            Mass of the star (in solar units). It has to be specified
+            if detrend_data is True.
+        Porb : None, optional
+            Orbital period of the planet (in days). It has to be specified if
+            detrend_data is True.
+
+        Returns
+        -------
+        detrended and trended flux : numpy array
+        """
+
+        logger.info("Removing trends from time series data\n")
+        # Compute the transit duration
+        transit_dur = t14(R_s=R_star, M_s=M_star,
+                          P=Porb, small_planet=False)
+
+        # Estimate the window length for the detrending
+        wl = 3.0 * transit_dur
+
+        # Detrend the time series data
+        detrended_flux, trended_flux = flatten(times, flux, return_trend=True,
+                                               method="biweight",
+                                               window_length=wl)
+        return detrended_flux, trended_flux
+
+    def bin_data(self, flux, times, bins):
+        """Bin data into groups by usinf the mean of each group
+
+        Parameters
+        ----------
+        flux : TYPE
+            Description
+        times : TYPE
+            Description
+        bins : TYPE
+            Description
+
+        Returns
+        -------
+        binned data: numpy array
+            Data in bins
+
+        """
+
+        # Makes dataframe of given data
+        df_flux = pd.DataFrame({"binned_flux": flux})
+        binned_flux = df_flux.groupby(df_flux.index // bins).mean()
+        binned_flux = binned_flux["binned_flux"]
+
+        df_time = pd.DataFrame({"binned_times": times})
+        binned_times = (df_time.groupby(df_time.index // bins).last()
+                        + df_time.groupby(df_time.index // bins).first()) / 2
+        binned_times = binned_times["binned_times"]
+
+        return binned_flux, binned_times
+
+    # @logged
+    def plot(self, bins=4, detrend=False, R_star=None, M_star=None, Porb=None):
+        """Plot a light curve using the flux time series
+
+        Parameters
+        ----------
+        bins : int, optional
+            Description
+        detrend : bool, optional (default is False)
+            If True, detrending of the time series data will be performed
+        R_star : None, optional
+            Radius of the star (in solar units). It has to be specified if
+            detrend is True.
+        M_star : None, optional
+            Mass of the star (in solar units). It has to be specified
+            if detrend is True.
+        Porb : None, optional
+            Orbital period of the planet (in days). It has to be specified if
+            detrend is True.
+
+        No Longer Returned
+        ------------------
+        """
+
         pd.plotting.register_matplotlib_converters()
 
-        # self.initialize_analysis()
+        self.initialize_analysis()
+
+        flux, times = self.clip_outliers()
+
+        if detrend:
+            flux, flux_tr = self.detrend_timeseries(times, flux,
+                                                    R_star=R_star,
+                                                    M_star=M_star,
+                                                    Porb=Porb)
+
+        # Standard deviation in ppm for the observation
+        std = np.nanstd(self.normalized_flux)
+
+        # Binned data and times
+        binned_flux, binned_times = self.bin_data(flux, times, bins)
+        std_binned = np.nanstd(binned_flux)
 
         # Total time for binsize
-        nbin_tot = self.exptime * self.binsize
+        nbin_tot = self.exptime * bins
 
         # Output directory for lightcurves
         lightcurves_directory = self.data_directory + self.output_dir_name
@@ -672,10 +765,10 @@ class LightCurve(TimeSeriesData):
         fig.suptitle(f"Differential Photometry\nTarget Star {self.star_id}, "
                      f"Aperture Radius = {self.r} pix", fontsize=13)
 
-        ax[3].plot(self.times_clipped, self.normalized_flux, "k.", ms=3,
-                   label=f"NBin = {self.exptime:.3f} d, std = {self.std:.2%}")
-        ax[3].plot(self.binned_dates, self.binned_data, "ro", ms=4,
-                   label=f"NBin = {nbin_tot:.3f} d, std = {self.std_binned:.2%}")
+        ax[3].plot(times, flux, "k.", ms=3,
+                   label=f"NBin = {self.exptime:.3f} d, std = {std:.2%}")
+        ax[3].plot(binned_times, binned_flux, "ro", ms=4,
+                   label=f"NBin = {nbin_tot:.3f} d, std = {std_binned:.2%}")
         # ax[3].errorbar(self.times, self.normalized_flux, yerr=self.sigma_total,
         #                fmt="none", ecolor="k", elinewidth=0.8,
         #                label="$\sigma_{\mathrm{tot}}=\sqrt{\sigma_{\mathrm{phot}}^{2} "
