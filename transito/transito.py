@@ -390,7 +390,7 @@ class TimeSeriesData:
 
                 y_cen, x_cen = self.find_centroid(center_yx, cutout,
                                                   masked_data.mask,
-                                                  method="moments")
+                                                  method="2dgaussian")
 
                 # Exposure time
                 exptimes.append(self.exptime * 24 * 60 * 60)
@@ -614,10 +614,6 @@ class LightCurve(TimeSeriesData):
                                          aperture_radius=aperture_radius,
                                          telescope=telescope)
 
-    def initialize_analysis(self):
-        time_series = self.get_relative_flux(save_rms=False)
-        return time_series
-
     def clip_outliers(self, sigma=5.0, sigma_lower=None, sigma_upper=None,
                       return_mask=False, **kwargs):
         """ Covenience wrapper for sigma_clip function from astropy.
@@ -637,7 +633,7 @@ class LightCurve(TimeSeriesData):
             return normalized_flux_clipped, times_clipped, mask
         return normalized_flux_clipped, times_clipped
 
-    def detrend_timeseries(self, times, flux, R_star=None,
+    def detrend_lightcurve(self, times, flux, R_star=None,
                            M_star=None, Porb=None):
         """Detrend time-series data
 
@@ -733,12 +729,12 @@ class LightCurve(TimeSeriesData):
 
         pd.plotting.register_matplotlib_converters()
 
-        self.initialize_analysis()
+        self.get_relative_flux()
 
-        flux, times = self.clip_outliers()
+        flux, times = self.clip_outliers(sigma=10)
 
         if detrend:
-            flux, flux_tr = self.detrend_timeseries(times, flux,
+            flux, flux_tr = self.detrend_lightcurve(times, flux,
                                                     R_star=R_star,
                                                     M_star=M_star,
                                                     Porb=Porb)

@@ -4,14 +4,13 @@ import os
 import logging
 
 import functools
-import pandas as pd
 
 from natsort import natsorted
 
 
 log = logging.getLogger(__name__)
 
-__all__ = ['search_files_across_directories', 'bin_dataframe', 'logged']
+__all__ = ['search_files_across_directories', 'logged']
 
 
 def search_files_across_directories(search_directory, search_pattern):
@@ -39,39 +38,6 @@ def search_files_across_directories(search_directory, search_pattern):
     files_list = natsorted(glob.glob(search_path, recursive=True))
 
     return files_list
-
-
-def bin_dataframe(data, nbin, bin_dates=False):
-    """Bin data into groups by usinf the mean of each group
-
-    Parameters
-    ----------
-    data : ndarray
-        array that contains the data to bin
-    nbin : int, optional
-        the amount of elements to group
-    bin_times : bool, optional
-        Flag to bin obervation times
-
-    Returns
-    -------
-    binned data: numpy array
-        Data in bins
-
-    """
-
-    # Makes dataframe of given data
-    df = pd.DataFrame({"data_to_bin": data})
-    binned_data = df.groupby(df.index // nbin).mean()
-    binned_data = binned_data["data_to_bin"]
-
-    if bin_dates:
-        binned_data = (df.groupby(df.index // nbin).last()
-                       + df.groupby(df.index // nbin).first()) / 2
-        binned_data = binned_data["data_to_bin"]
-        return binned_data
-
-    return binned_data
 
 
 def logged(func):
