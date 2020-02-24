@@ -7,11 +7,11 @@ from setuptools import setup
 if "release" in sys.argv[-1]:
     os.system("python setup.py sdist")
     os.system("twine upload dist/*")
-    os.system("rm -rf dist/transito*")
+    os.system("rm -rf dist/transyto*")
     sys.exit()
 
 # Load the __version__ variable without importing the package already
-exec(open('transito/version.py').read())
+exec(open('transyto/version.py').read())
 
 # DEPENDENCIES
 # 1. What are the required dependencies?
@@ -29,18 +29,18 @@ extras_require = {"all": ["astropy>=3.1",
                            "pybind11", "celerite"],
                   "test": tests_require}
 
-setup(name='transito',
+setup(name='transyto',
       version=__version__,
       description="A package for time series photometry "
                   "in Python.",
       long_description=open('README.rst').read(),
       author='Jaime Andrés Alvarado Montes',
       author_email='jaime-andres.alvarado-montes@hdr.mq.edu.au',
-      url='https://github.com/JAAlvarado-Montes/transito',
+      url='https://github.com/JAAlvarado-Montes/transyto',
       license='MIT',
       package_dir={
-            'transito': 'transito'},
-      packages=['transito'],
+            'transyto': 'transyto'},
+      packages=['transyto'],
       install_requires=install_requires,
       extras_require=extras_require,
       setup_requires=['pytest-runner'],
