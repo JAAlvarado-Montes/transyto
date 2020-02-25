@@ -25,8 +25,8 @@ tests_require = ['pytest', 'pytest-cov', 'pytest-remotedata', 'codecov',
 # `interact()` requires bokeh>=1.0, ipython.
 # `PLDCorrector` requires pybind11, celerite.
 extras_require = {"all": ["astropy>=3.1",
-                           "bokeh>=1.0", "ipython",
-                           "pybind11", "celerite"],
+                          "bokeh>=1.0", "ipython",
+                          "pybind11", "celerite"],
                   "test": tests_require}
 
 setup(name='transyto',
