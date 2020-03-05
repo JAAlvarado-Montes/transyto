@@ -21,6 +21,7 @@ from astropy.stats import sigma_clip
 # from astropy.io.fits import Undefined
 
 
+from transitleastsquares import transitleastsquares
 from collections import namedtuple
 from pathlib import Path
 from operator import itemgetter
@@ -370,7 +371,7 @@ class TimeSeriesData:
         # List of good frames
         self.good_frames_list = list()
 
-        for fn in fits_files[0:600]:
+        for fn in fits_files:
             # Get data, header and WCS of fits files with any extension
             ext = 0
             if fn.endswith(".fz"):
@@ -390,7 +391,7 @@ class TimeSeriesData:
 
                 y_cen, x_cen = self.find_centroid(center_yx, cutout,
                                                   masked_data.mask,
-                                                  method="2dgaussian")
+                                                  method="moments")
 
                 # Exposure time
                 exptimes.append(self.exptime * 24 * 60 * 60)
@@ -716,6 +717,24 @@ class LightCurve(TimeSeriesData):
         self.get_relative_flux()
 
         flux, times = self.clip_outliers(sigma=10)
+
+        model = transitleastsquares(times, flux)
+        results = model.power()
+
+        print('Period', format(results.period, '.5f'), 'd')
+        print(len(results.transit_times), 'transit times in time series:', \
+              ['{0:0.5f}'.format(i) for i in results.transit_times])
+        print('Transit depth', format(results.depth, '.5f'))
+        print('Best duration (days)', format(results.duration, '.5f'))
+        print('Signal detection efficiency (SDE):', results.SDE)
+
+        plt.figure()
+        plt.plot(results.model_folded_phase, results.model_folded_model, color='red')
+        plt.scatter(results.folded_phase, results.folded_y, color='blue', s=10, alpha=0.5, zorder=2)
+        plt.xlim(0.48, 0.52)
+        plt.xlabel('Phase')
+        plt.ylabel('Relative flux')
+        plt.savefig("prueba.png")
 
         if detrend:
             flux, flux_tr = self.detrend_lightcurve(times, flux,
