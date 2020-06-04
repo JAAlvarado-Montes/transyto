@@ -23,7 +23,7 @@ Let's detect Tránsyto(s)!
 **Tránsyto** is a community-developed, open-source Python package which offers a simple and user-friendly way
 to analyse astronomical flux time-series data, with an emphasis on ground-based observations.
 
-.. Image:: ./docs/source/_static/images/prueba.gif
+.. Image:: ./docs/source/_static/images/logo.png
 
 This package aims at lowering the barrier for students, astronomers,
 and citizen scientists interested in analyzing Kepler and TESS space telescope data.
