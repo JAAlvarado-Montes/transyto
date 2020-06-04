@@ -657,7 +657,7 @@ class LightCurve(TimeSeriesData):
                                                window_length=wl)
         return detrended_flux, trended_flux
 
-    def bin_data(self, flux, times, bins):
+    def bin_timeseries(self, flux, times, bins):
         """Bin data into groups by usinf the mean of each group
 
         Parameters
@@ -746,7 +746,7 @@ class LightCurve(TimeSeriesData):
         std = np.nanstd(self.normalized_flux)
 
         # Binned data and times
-        binned_flux, binned_times = self.bin_data(flux, times, bins)
+        binned_flux, binned_times = self.bin_timeseries(flux, times, bins)
         std_binned = np.nanstd(binned_flux)
 
         # Total time for binsize
