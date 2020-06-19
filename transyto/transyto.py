@@ -21,6 +21,7 @@ from astropy.stats import sigma_clip
 # from astropy.io.fits import Undefined
 
 
+from transitleastsquares import transitleastsquares
 from collections import namedtuple
 from pathlib import Path
 from operator import itemgetter
@@ -31,14 +32,14 @@ from matplotlib import dates
 
 from photutils.aperture.circle import CircularAperture, CircularAnnulus
 from photutils import aperture_photometry
-from photutils import centroid_2dg
+from photutils import centroid_2dg, centroid_1dg, centroid_com
 
 from . import PACKAGEDIR
 from .utils import (
-    search_files_across_directories, bin_dataframe
+    search_files_across_directories
 )
 
-__all__ = ['TimeSeriesData']
+__all__ = ['TimeSeriesData', 'LightCurve']
 
 # Logger to track activity of the class
 logger = logging.getLogger()
@@ -54,7 +55,8 @@ class TimeSeriesData:
                  data_directory,
                  search_pattern,
                  list_reference_stars,
-                 aperture_radius):
+                 aperture_radius,
+                 telescope="TESS"):
         """Initialize class Photometry for a given target and reference stars.
 
         Parameters
@@ -76,6 +78,7 @@ class TimeSeriesData:
         self.data_directory = data_directory
         self.search_pattern = search_pattern
         self.list_reference_stars = list_reference_stars
+        self.telescope = telescope
 
         # Aperture parameters
         self.r = aperture_radius
@@ -84,9 +87,6 @@ class TimeSeriesData:
 
         # Centroid bow width for centroid function.
         self.box_width = 2 * (self.r + 1)
-
-        # Data bin
-        self.binsize = 4
 
         # Output directory for logs
         logs_dir = self.data_directory + "logs_photometry"
@@ -125,8 +125,10 @@ class TimeSeriesData:
         return self.get_keyword_value().gain
 
     @property
-    def keyword_list(self, telescope="TESS"):
+    def keyword_list(self):
         file = str(Path(__file__).parents[1]) + "/" + "telescope_keywords.csv"
+
+        telescope = self.telescope
 
         (Huntsman,
          TESS,
@@ -141,6 +143,12 @@ class TimeSeriesData:
             kw_list = Huntsman
         elif telescope == "TESS":
             kw_list = TESS
+        elif telescope == "WASP":
+            kw_list = WASP
+        elif telescope == "MEARTH":
+            kw_list = MEARTH
+        elif telescope == "POCS":
+            kw_list = POCS
 
         return kw_list
 
@@ -155,6 +163,66 @@ class TimeSeriesData:
         masked_image = ma.masked_values(image, threshold)
 
         return masked_image
+
+    def _estimate_centroid_via_2dgaussian(self, data, mask):
+        """Computes the centroid of a data array using a 2D gaussian
+        from photutils.
+        """
+        x, y = centroid_2dg(data, mask=mask)
+        return x, y
+
+    def _estimate_centroid_via_1dgaussian(self, data, mask):
+        """Computes the centroid of a data array using a 2D gaussian
+        from photutils.
+        """
+        x, y = centroid_1dg(data, mask=mask)
+        return x, y
+
+    def _estimate_centroid_via_moments(self, data, mask):
+        """Computes the centroid of a data array using a 2D gaussian
+        from photutils.
+        """
+        x, y = centroid_com(data, mask=mask)
+        return x, y
+
+    def find_centroid(self, prior_centroid, data, mask, method="2dgaussian"):
+
+        prior_y, prior_x = prior_centroid
+        with warnings.catch_warnings():
+            # Ignore warning for the centroid_2dg function
+            warnings.simplefilter('ignore', category=UserWarning)
+
+            if method == "2dgaussian":
+                x_cen, y_cen = self._estimate_centroid_via_2dgaussian(data,
+                                                                      mask)
+            elif method == "1dgaussian":
+                x_cen, y_cen = self._estimate_centroid_via_1dgaussian(data,
+                                                                      mask)
+
+            elif method == "moments":
+                x_cen, y_cen = self._estimate_centroid_via_moments(data, mask)
+
+            # Compute the shifts in y and x.
+            shift_y = self.box_width / 2 - y_cen
+            shift_x = self.box_width / 2 - x_cen
+
+            if shift_y < 0 and shift_x < 0:
+                new_y = prior_y + np.abs(shift_y)
+                new_x = prior_x + np.abs(shift_x)
+            elif shift_y > 0 and shift_x > 0:
+                new_y = prior_y - shift_y
+                new_x = prior_x - shift_x
+            elif shift_y < 0 and shift_x > 0:
+                new_y = prior_y + np.abs(shift_y)
+                new_x = prior_x - shift_x
+            elif shift_y > 0 and shift_x < 0:
+                new_y = prior_y - shift_y
+                new_x = prior_x + np.abs(shift_x)
+            else:
+                new_y = prior_y
+                new_x = prior_x
+
+            return new_y, new_x
 
     def get_keyword_value(self, default=None):
         """Returns a header keyword value.
@@ -260,7 +328,7 @@ class TimeSeriesData:
                 phot_table["background_in_target"].item())
 
     # @logged
-    def get_star_data(self, star_id, data_directory, search_pattern):
+    def do_photometry(self, star_id, data_directory, search_pattern):
         """Get all data from plate-solved images (right ascention,
            declination, airmass, dates, etc). Then, it converts the
            right ascention and declination into image positions to
@@ -303,7 +371,7 @@ class TimeSeriesData:
         # List of good frames
         self.good_frames_list = list()
 
-        for fn in fits_files[0:600]:
+        for fn in fits_files:
             # Get data, header and WCS of fits files with any extension
             ext = 0
             if fn.endswith(".fz"):
@@ -317,33 +385,13 @@ class TimeSeriesData:
                 # Star pixel positions in the image
                 center_yx = wcs.all_world2pix(star.ra, star.dec, 0)
 
-                sliced_data = self._slice_data(data, center_yx, self.box_width)
+                cutout = self._slice_data(data, center_yx, self.box_width)
 
-                masked_data = self._mask_data(sliced_data)
+                masked_data = self._mask_data(cutout)
 
-                with warnings.catch_warnings():
-                    # Ignore warning for the centroid_2dg function
-                    warnings.simplefilter('ignore', category=UserWarning)
-                    x_cen, y_cen = centroid_2dg(sliced_data,
-                                                mask=masked_data.mask)
-                    shift_y = self.box_width / 2 - y_cen
-                    shift_x = self.box_width / 2 - x_cen
-
-                    if shift_y < 0 and shift_x < 0:
-                        new_y = center_yx[0] + np.abs(shift_y)
-                        new_x = center_yx[1] + np.abs(shift_x)
-                    if shift_y > 0 and shift_x > 0:
-                        new_y = center_yx[0] - shift_y
-                        new_x = center_yx[1] - shift_x
-                    if shift_y < 0 and shift_x > 0:
-                        new_y = center_yx[0] + np.abs(shift_y)
-                        new_x = center_yx[1] - shift_x
-                    if shift_y > 0 and shift_x < 0:
-                        new_y = center_yx[0] - shift_y
-                        new_x = center_yx[1] + np.abs(shift_x)
-                    else:
-                        new_y = center_yx[0]
-                        new_x = center_yx[1]
+                y_cen, x_cen = self.find_centroid(center_yx, cutout,
+                                                  masked_data.mask,
+                                                  method="moments")
 
                 # Exposure time
                 exptimes.append(self.exptime * 24 * 60 * 60)
@@ -353,8 +401,7 @@ class TimeSeriesData:
 
                 # Sum of counts inside aperture
                 (counts_in_aperture,
-                 bkg_in_object) = self.make_aperture(data,
-                                                     (new_y, new_x),
+                 bkg_in_object) = self.make_aperture(data, (y_cen, x_cen),
                                                      radius=self.r,
                                                      r_in=self.r_in,
                                                      r_out=self.r_out)
@@ -372,12 +419,7 @@ class TimeSeriesData:
                 exptimes, x_pos, y_pos, times)
 
     # @logged
-    def do_photometry(self,
-                      save_rms=False,
-                      detrend_data=False,
-                      R_star=None,
-                      M_star=None,
-                      Porb=None):
+    def get_relative_flux(self, save_rms=False):
         """Find the flux of a target star relative to some reference stars,
            using the counts inside an aperture
 
@@ -386,17 +428,6 @@ class TimeSeriesData:
         save_rms : bool, optional
             Save a txt file with the rms achieved for each time that
             the class is executed (defaul is False)
-        detrend_data : bool, optional (default is False)
-            If True, detrending of the time series data will be performed
-        R_star : None, optional
-            Radius of the star (in solar units). It has to be specified if
-            detrend_data is True.
-        M_star : None, optional
-            Mass of the star (in solar units). It has to be specified
-            if detrend_data is True.
-        Porb : None, optional
-            Orbital period of the planet (in days). It has to be specified if
-            detrend_data is True.
 
         Returns
         -------
@@ -414,7 +445,7 @@ class TimeSeriesData:
          exptimes,
          x_pos_target,
          y_pos_target,
-         self.times) = self.get_star_data(self.star_id,
+         self.times) = self.do_photometry(self.star_id,
                                           self.data_directory,
                                           self.search_pattern)
 
@@ -481,7 +512,7 @@ class TimeSeriesData:
              exptimes_ref,
              x_pos_ref,
              y_pos_ref,
-             obs_dates) = self.get_star_data(ref_star,
+             obs_dates) = self.do_photometry(ref_star,
                                              self.data_directory,
                                              self.search_pattern)
             self.reference_star_flux_sec.append(np.asarray(refer_flux) / exptimes)
@@ -533,41 +564,6 @@ class TimeSeriesData:
                     f"with {len(self.good_frames_list)} frames "
                     f"of camera {self.instrument} (run time: {exec_time:.3f} sec)\n")
 
-        # Neglect outliers in the timeseries: create mask
-        self.clipped_values_mask = sigma_clip(self.normalized_flux, sigma=10,
-                                              maxiters=10, cenfunc=np.median,
-                                              masked=True, copy=True)
-        self.normalized_flux = self.normalized_flux[~self.clipped_values_mask.mask]
-        self.times_clipped = self.times[~self.clipped_values_mask.mask]
-
-        if detrend_data:
-            logger.info("Removing trends from time series data\n")
-            # Compute the transit duration
-            transit_dur = t14(R_s=R_star, M_s=M_star,
-                              P=Porb, small_planet=False)
-
-            # Estimate the window length for the detrending
-            wl = 3.0 * transit_dur
-
-            # Detrend the time series data
-            self.normalized_flux, self.lc_trend = flatten(self.times_clipped,
-                                                          self.normalized_flux,
-                                                          return_trend=True,
-                                                          method="biweight",
-                                                          window_length=wl)
-
-        # Standard deviation in ppm for the observation
-        self.std = np.nanstd(self.normalized_flux)
-
-        # Binned data and its standard deviation in ppm
-        self.binned_data = bin_dataframe(self.normalized_flux, self.binsize)
-        self.std_binned = np.nanstd(self.binned_data)
-
-        # Binned times
-        self.binned_dates = bin_dataframe(self.times_clipped,
-                                          self.binsize,
-                                          bin_dates=True)
-
         # Output directory
         self.output_dir_name = "TimeSeries_Analysis"
 
@@ -585,20 +581,176 @@ class TimeSeriesData:
                            f"{np.nanmedian(S_to_N_obj)} {np.nanmedian(S_to_N_ref)} "
                            f"{np.nanmedian(S_to_N_diff)}\n")
 
-        Outputs = namedtuple("Outputs",
-                             "target_flux_sec total_ref_flux_sec sigma_error times")
+        return (self.times, self.target_flux_sec, self.sigma_total)
 
-        return Outputs(self.target_flux_sec, total_reference_flux_sec,
-                       self.sigma_total, self.times)
+
+class LightCurve(TimeSeriesData):
+    def __init__(self,
+                 star_id,
+                 data_directory,
+                 search_pattern,
+                 list_reference_stars,
+                 aperture_radius,
+                 telescope="TESS"):
+        super(LightCurve, self).__init__(star_id=star_id,
+                                         data_directory=data_directory,
+                                         search_pattern=search_pattern,
+                                         list_reference_stars=list_reference_stars,
+                                         aperture_radius=aperture_radius,
+                                         telescope=telescope)
+
+    def clip_outliers(self, sigma=5.0, sigma_lower=None, sigma_upper=None,
+                      return_mask=False, **kwargs):
+        """ Covenience wrapper for sigma_clip function from astropy.
+        """
+
+        clipped_data = sigma_clip(data=self.normalized_flux,
+                                  sigma=sigma, maxiters=10,
+                                  cenfunc=np.median,
+                                  masked=True,
+                                  copy=True)
+
+        mask = clipped_data.mask
+        normalized_flux_clipped = self.normalized_flux[~mask]
+        times_clipped = self.times[~mask]
+
+        if return_mask:
+            return normalized_flux_clipped, times_clipped, mask
+        return normalized_flux_clipped, times_clipped
+
+    def detrend_lightcurve(self, times, flux, R_star=None,
+                           M_star=None, Porb=None):
+        """Detrend time-series data
+
+        Parameters
+        ----------
+        times : array
+            Times of the observation
+        flux : array
+            Flux with trend to be removed
+        R_star : None, optional
+            Radius of the star (in solar units). It has to be specified if
+            detrend_data is True.
+        M_star : None, optional
+            Mass of the star (in solar units). It has to be specified
+            if detrend_data is True.
+        Porb : None, optional
+            Orbital period of the planet (in days). It has to be specified if
+            detrend_data is True.
+
+        Returns
+        -------
+        detrended and trended flux : numpy array
+        """
+
+        logger.info("Removing trends from time series data\n")
+        # Compute the transit duration
+        transit_dur = t14(R_s=R_star, M_s=M_star,
+                          P=Porb, small_planet=False)
+
+        # Estimate the window length for the detrending
+        wl = 3.0 * transit_dur
+
+        # Detrend the time series data
+        detrended_flux, trended_flux = flatten(times, flux, return_trend=True,
+                                               method="biweight",
+                                               window_length=wl)
+        return detrended_flux, trended_flux
+
+    def bin_timeseries(self, flux, times, bins):
+        """Bin data into groups by usinf the mean of each group
+
+        Parameters
+        ----------
+        flux : TYPE
+            Description
+        times : TYPE
+            Description
+        bins : TYPE
+            Description
+
+        Returns
+        -------
+        binned data: numpy array
+            Data in bins
+
+        """
+
+        # Makes dataframe of given data
+        df_flux = pd.DataFrame({"binned_flux": flux})
+        binned_flux = df_flux.groupby(df_flux.index // bins).mean()
+        binned_flux = binned_flux["binned_flux"]
+
+        df_time = pd.DataFrame({"binned_times": times})
+        binned_times = (df_time.groupby(df_time.index // bins).last()
+                        + df_time.groupby(df_time.index // bins).first()) / 2
+        binned_times = binned_times["binned_times"]
+
+        return binned_flux, binned_times
 
     # @logged
-    def plot_lightcurve(self):
-        """Plot a light curve using the flux time series data.
+    def plot(self, bins=4, detrend=False, R_star=None, M_star=None, Porb=None):
+        """Plot a light curve using the flux time series
+
+        Parameters
+        ----------
+        bins : int, optional
+            Description
+        detrend : bool, optional (default is False)
+            If True, detrending of the time series data will be performed
+        R_star : None, optional
+            Radius of the star (in solar units). It has to be specified if
+            detrend is True.
+        M_star : None, optional
+            Mass of the star (in solar units). It has to be specified
+            if detrend is True.
+        Porb : None, optional
+            Orbital period of the planet (in days). It has to be specified if
+            detrend is True.
+
+        No Longer Returned
+        ------------------
         """
+
         pd.plotting.register_matplotlib_converters()
 
+        self.get_relative_flux()
+
+        flux, times = self.clip_outliers(sigma=10)
+
+        model = transitleastsquares(times, flux)
+        results = model.power()
+
+        print('Period', format(results.period, '.5f'), 'd')
+        print(len(results.transit_times), 'transit times in time series:', \
+              ['{0:0.5f}'.format(i) for i in results.transit_times])
+        print('Transit depth', format(results.depth, '.5f'))
+        print('Best duration (days)', format(results.duration, '.5f'))
+        print('Signal detection efficiency (SDE):', results.SDE)
+
+        plt.figure()
+        plt.plot(results.model_folded_phase, results.model_folded_model, color='red')
+        plt.scatter(results.folded_phase, results.folded_y, color='blue', s=10, alpha=0.5, zorder=2)
+        plt.xlim(0.48, 0.52)
+        plt.xlabel('Phase')
+        plt.ylabel('Relative flux')
+        plt.savefig("prueba.png")
+
+        if detrend:
+            flux, flux_tr = self.detrend_lightcurve(times, flux,
+                                                    R_star=R_star,
+                                                    M_star=M_star,
+                                                    Porb=Porb)
+
+        # Standard deviation in ppm for the observation
+        std = np.nanstd(self.normalized_flux)
+
+        # Binned data and times
+        binned_flux, binned_times = self.bin_timeseries(flux, times, bins)
+        std_binned = np.nanstd(binned_flux)
+
         # Total time for binsize
-        nbin_tot = self.exptime * self.binsize
+        nbin_tot = self.exptime * bins
 
         # Output directory for lightcurves
         lightcurves_directory = self.data_directory + self.output_dir_name
@@ -612,10 +764,10 @@ class TimeSeriesData:
         fig.suptitle(f"Differential Photometry\nTarget Star {self.star_id}, "
                      f"Aperture Radius = {self.r} pix", fontsize=13)
 
-        ax[3].plot(self.times_clipped, self.normalized_flux, "k.", ms=3,
-                   label=f"NBin = {self.exptime:.3f} d, std = {self.std:.2%}")
-        ax[3].plot(self.binned_dates, self.binned_data, "ro", ms=4,
-                   label=f"NBin = {nbin_tot:.3f} d, std = {self.std_binned:.2%}")
+        ax[3].plot(times, flux, "k.", ms=3,
+                   label=f"NBin = {self.exptime:.3f} d, std = {std:.2%}")
+        ax[3].plot(binned_times, binned_flux, "ro", ms=4,
+                   label=f"NBin = {nbin_tot:.3f} d, std = {std_binned:.2%}")
         # ax[3].errorbar(self.times, self.normalized_flux, yerr=self.sigma_total,
         #                fmt="none", ecolor="k", elinewidth=0.8,
         #                label="$\sigma_{\mathrm{tot}}=\sqrt{\sigma_{\mathrm{phot}}^{2} "

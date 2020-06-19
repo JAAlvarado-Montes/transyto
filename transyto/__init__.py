@@ -4,7 +4,7 @@ from __future__ import absolute_import
 
 import os
 PACKAGEDIR = os.path.abspath(os.path.dirname(__file__))
-MPLSTYLE = '{}/data/transito.mplstyle'.format(PACKAGEDIR)
+MPLSTYLE = '{}/data/transyto.mplstyle'.format(PACKAGEDIR)
 
 # By default Matplotlib is configured to work with a graphical user interface
 # which may require an X11 connection (i.e. a display).  When no display is
@@ -19,6 +19,6 @@ log = logging.getLogger(__name__)
 log.addHandler(logging.StreamHandler())
 
 from .version import __version__
-from .transito import *
+from .transyto import *
 from .utils import *
 from .wcs import *
