@@ -5,10 +5,8 @@ Let's detect Tránsyto(s)!
 
 **Documentation: https://**
 
-|test-badge| |conda-badge| |pypi-badge| |pypi-downloads| |doi-badge| |astropy-badge|
+|test-badge| |pypi-badge| |pypi-downloads| |astropy-badge|
 
-.. |conda-badge| image:: https://img.shields.io/conda/vn/conda-forge/lightkurve.svg
-                 :target: https://anaconda.org/conda-forge/lightkurve
 .. |pypi-badge| image:: https://img.shields.io/pypi/v/lightkurve.svg
                 :target: https://pypi.python.org/pypi/lightkurve
 .. |pypi-downloads| image:: https://pepy.tech/badge/lightkurve/month
@@ -17,8 +15,6 @@ Let's detect Tránsyto(s)!
                  :target: https://github.com/KeplerGO/lightkurve/actions?query=branch%3Amaster
 .. |astropy-badge| image:: https://img.shields.io/badge/powered%20by-AstroPy-orange.svg?style=flat
                    :target: http://www.astropy.org
-.. |doi-badge| image:: https://zenodo.org/badge/DOI/10.5281/zenodo.1181928.svg
-              :target: https://docs.lightkurve.org/about/citing.html             
 
 **Tránsyto** is a community-developed, open-source Python package which offers a simple and user-friendly way
 to analyse astronomical flux time-series data, with an emphasis on ground-based observations.
