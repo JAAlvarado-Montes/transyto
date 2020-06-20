@@ -1,7 +1,6 @@
 from .utils import search_files_across_directories, getheader
 from astropy.wcs import WCS
 
-from pocs.utils import error
 from warnings import warn
 
 import os
@@ -100,13 +99,11 @@ def plate_solve_frame(fname, timeout=1200, solve_opts=None,
         proc = subprocess.run(cmd, universal_newlines=True,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except OSError as e:
-        raise error.InvalidCommand(
-            "Can't send command to solve_field.sh: {} \t {}".format(e, cmd))
+        raise "Can't send command to solve_field.sh: {} \t {}".format(e, cmd)
     except ValueError as e:
-        raise error.InvalidCommand(
-            "Bad parameters to solve_field: {} \t {}".format(e, cmd))
+        raise "Bad parameters to solve_field: {} \t {}".format(e, cmd)
     except Exception as e:
-        raise error.PanError("Timeout on plate solving: {}".format(e))
+        raise "Timeout on plate solving: {}".format(e)
 
     if verbose:
         print("Returning proc from solve_field")
