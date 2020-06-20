@@ -839,17 +839,17 @@ class LightCurve(TimeSeriesData):
         fig, ax = plt.subplots(1, 1,
                                sharey="row", sharex="col", figsize=(13, 10))
         fig.suptitle(f"Evolution of Noise Sources for the Target Star {self.star_id} "
-                     "($m_\mathrm{V}=10.9$)\n"
+                     r"($m_\mathrm{V}=10.9$)\n"
                      f"Huntsman Defocused Camera {self.instrument}, G Band Filter\n"
                      f"Sector 2", fontsize=15)
         ax.plot_date(self.times, self.sigma_total * 100, "k-",
-                     label="$\sigma_{\mathrm{total}}$")
+                     label=r"$\sigma_{\mathrm{total}}$")
         ax.plot_date(self.times, self.sigma_phot * 100, color="firebrick", marker=None,
-                     ls="-", label="$\sigma_{\mathrm{phot}}$")
+                     ls="-", label=r"$\sigma_{\mathrm{phot}}$")
         ax.plot_date(self.times, self.sigma_sky * 100,
-                     "b-", label="$\sigma_{\mathrm{sky}}$")
+                     "b-", label=r"$\sigma_{\mathrm{sky}}$")
         ax.plot_date(self.times, self.sigma_ron * 100,
-                     "r-", label="$\sigma_{\mathrm{read}}$")
+                     "r-", label=r"$\sigma_{\mathrm{read}}$")
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, 0.998), fancybox=True,
                   ncol=5, frameon=True, fontsize=15)
         # ax.set_yscale("log")
