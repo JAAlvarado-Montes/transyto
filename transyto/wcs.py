@@ -1,6 +1,6 @@
-from .utils import search_files_across_directories
+from .utils import search_files_across_directories, getheader
 from astropy.wcs import WCS
-from pocs.utils.images.fits import getheader
+
 from pocs.utils import error
 from warnings import warn
 
