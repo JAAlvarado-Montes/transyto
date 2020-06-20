@@ -9,3 +9,4 @@ wotan
 photutils>=0.7
 pandas
 uncertainties
+llvmlite>=0.33
