@@ -13,7 +13,7 @@ def dirs_to_check(request):
 
 def test_conformance(dirs_to_check):
     """Test that transyto follows PEP-8."""
-    FILEDIR = Path(__file__).parents[1]
+    FILEDIR = Path(__file__).parents[2]
     config_file = os.path.join(FILEDIR, '.pycodestyle.cfg')
     style = pycodestyle.StyleGuide(quiet=False, config_file=config_file)
 
