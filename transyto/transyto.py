@@ -722,7 +722,7 @@ class LightCurve(TimeSeriesData):
         results = model.power()
 
         print('Period', format(results.period, '.5f'), 'd')
-        print(len(results.transit_times), 'transit times in time series:', \
+        print(len(results.transit_times), 'transit times in time series:',
               ['{0:0.5f}'.format(i) for i in results.transit_times])
         print('Transit depth', format(results.depth, '.5f'))
         print('Best duration (days)', format(results.duration, '.5f'))
