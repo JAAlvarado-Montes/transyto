@@ -1,4 +1,4 @@
-from metah.utils.image_utils import (search_files_across_directories)
+from .utils import search_files_across_directories
 from astropy.wcs import WCS
 from pocs.utils.images.fits import getheader
 from pocs.utils import error
