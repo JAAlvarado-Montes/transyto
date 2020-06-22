@@ -11,8 +11,8 @@ Let's detect Tránsyto(s)!
                 :target: https://pypi.python.org/pypi/lightkurve
 .. |pypi-downloads| image:: https://pepy.tech/badge/lightkurve/month
                 :target: https://pepy.tech/project/lightkurve/month
-.. |test-badge| image:: https://github.com/KeplerGO/lightkurve/workflows/Lightkurve-tests/badge.svg
-                 :target: https://github.com/KeplerGO/lightkurve/actions?query=branch%3Amaster
+.. |test-badge| image:: https://github.com/JAAlvarado-Montes/transyto/workflows/transyto-build-test/badge.svg
+                 :target: https://github.com/JAAlvarado-Montes/transyto/actions?query=workflow%3Atransyto-build-test
 .. |astropy-badge| image:: https://img.shields.io/badge/powered%20by-AstroPy-orange.svg?style=flat
                    :target: http://www.astropy.org
 
