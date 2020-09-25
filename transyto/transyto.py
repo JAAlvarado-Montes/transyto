@@ -598,13 +598,14 @@ class LightCurve(TimeSeriesData):
                                          aperture_radius=aperture_radius,
                                          telescope=telescope)
 
-    def clip_outliers(self, time, flux, sigma=5.0, sigma_lower=None, sigma_upper=None,
+    def clip_outliers(self, time, flux, sigma, sigma_lower=None, sigma_upper=None,
                       return_mask=False, **kwargs):
         """ Covenience wrapper for sigma_clip function from astropy.
         """
 
         clipped_data = sigma_clip(data=flux,
-                                  sigma=sigma, maxiters=10,
+                                  sigma=sigma,
+                                  maxiters=10,
                                   cenfunc=np.median,
                                   masked=True,
                                   copy=True)
@@ -688,7 +689,7 @@ class LightCurve(TimeSeriesData):
         return binned_flux, binned_times
 
     # @logged
-    def plot(self, time, flux, sigma=10,
+    def plot(self, time, flux, sigma=5,
              bins=4, detrend=False,
              R_star=None, M_star=None,
              Porb=None):
@@ -696,6 +697,12 @@ class LightCurve(TimeSeriesData):
 
         Parameters
         ----------
+        time : list or array,
+            List of times of observations
+        flux : list or array,
+            List of target flux
+        sigma : float, optional
+            Number of sigmas to clip outliers from time series data
         bins : int, optional
             Description
         detrend : bool, optional (default is False)
