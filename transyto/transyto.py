@@ -834,11 +834,11 @@ class LightCurve(TimeSeriesData):
                      f"Sector 2", fontsize=15)
         ax.plot_date(time, self.sigma_total * 100, "k-",
                      label=r"$\sigma_{\mathrm{total}}$")
-        ax.plot_date(self.times, self.sigma_phot * 100, color="firebrick", marker=None,
+        ax.plot_date(time, self.sigma_phot * 100, color="firebrick", marker=None,
                      ls="-", label=r"$\sigma_{\mathrm{phot}}$")
-        ax.plot_date(self.times, self.sigma_sky * 100,
+        ax.plot_date(time, self.sigma_sky * 100,
                      "b-", label=r"$\sigma_{\mathrm{sky}}$")
-        ax.plot_date(self.times, self.sigma_ron * 100,
+        ax.plot_date(time, self.sigma_ron * 100,
                      "r-", label=r"$\sigma_{\mathrm{read}}$")
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, 0.998), fancybox=True,
                   ncol=5, frameon=True, fontsize=15)
