@@ -41,9 +41,6 @@ from .utils import (
 
 __all__ = ['TimeSeriesData', 'LightCurve']
 
-# Logger to track activity of the class
-logger = logging.getLogger()
-
 # warnings.filterwarnings('ignore', category=UserWarning, append=True)
 
 
@@ -92,13 +89,15 @@ class TimeSeriesData:
         logs_dir = self.data_directory + "logs_photometry"
         os.makedirs(logs_dir, exist_ok=True)
 
-        logger.addHandler(logging.FileHandler(filename=os.path.join(logs_dir,
-                                              'photometry.log'), mode='w'))
+        # Logger to track activity of the class
+        self.logger = logging.getLogger(f"{self.pipeline} logger")
+        self.logger.addHandler(logging.FileHandler(filename=os.path.join(logs_dir,
+                                                                         'photometry.log'), mode='w'))
+        self.logger.setLevel(logging.DEBUG)
 
-        logger.info(pyfiglet.figlet_format("-*-*-*-\n{}\n-*-*-*-".format(self.pipeline)))
-
-        logger.info("{} will use {} reference stars for the photometry\n".
-                    format(self.pipeline, len(self.list_reference_stars)))
+        self.logger.info(pyfiglet.figlet_format(f"-*-*-*-\n{self.pipeline}\n-*-*-*-"))
+        self.logger.info("{} will use {} reference stars for the photometry\n".
+                         format(self.pipeline, len(self.list_reference_stars)))
 
     @property
     def pipeline(self):
@@ -234,7 +233,7 @@ class TimeSeriesData:
         try:
             kw_values = itemgetter(*self.keyword_list)(self.header)
         except KeyError:
-            logger.error("Header keyword does not exist")
+            self.logger.error("Header keyword does not exist")
             return default
         exp, obstime, instr, readout, gain = kw_values
 
@@ -322,7 +321,7 @@ class TimeSeriesData:
         phot_table["target_aperture_bkg_subtracted"] = object_final_counts
         phot_table["target_aperture_bkg_subtracted"].info.format = "%.8g"
 
-        logger.info(phot_table["target_aperture_bkg_subtracted"])
+        self.logger.info(phot_table["target_aperture_bkg_subtracted"])
 
         return (phot_table["target_aperture_bkg_subtracted"].item(),
                 phot_table["background_in_target"].item())
@@ -371,7 +370,7 @@ class TimeSeriesData:
         # List of good frames
         self.good_frames_list = list()
 
-        for fn in fits_files:
+        for fn in fits_files[:500]:
             # Get data, header and WCS of fits files with any extension
             ext = 0
             if fn.endswith(".fz"):
@@ -391,7 +390,7 @@ class TimeSeriesData:
 
                 y_cen, x_cen = self.find_centroid(center_yx, cutout,
                                                   masked_data.mask,
-                                                  method="moments")
+                                                  method="2dgaussian")
 
                 # Exposure time
                 exptimes.append(self.exptime * 24 * 60 * 60)
@@ -437,7 +436,7 @@ class TimeSeriesData:
         """
         start = time.time()
 
-        logger.info(f"Starting aperture photometry for {self.star_id}\n")
+        self.logger.info(f"Starting aperture photometry for {self.star_id}\n")
 
         # Get flux of target star
         (target_flux,
@@ -445,15 +444,15 @@ class TimeSeriesData:
          exptimes,
          x_pos_target,
          y_pos_target,
-         self.times) = self.do_photometry(self.star_id,
-                                          self.data_directory,
-                                          self.search_pattern)
+         times) = self.do_photometry(self.star_id,
+                                     self.data_directory,
+                                     self.search_pattern)
 
-        self.times = np.asarray(self.times)
+        times = np.asarray(times)
 
-        logger.info("Finished aperture photometry on target star. "
-                    f"{self.__class__.__name__} will compute now the "
-                    "combined flux of the ensemble\n")
+        self.logger.info("Finished aperture photometry on target star. "
+                         f"{self.__class__.__name__} will compute now the "
+                         "combined flux of the ensemble\n")
 
         # Positions of target star
         self.x_pos_target = np.array(x_pos_target) - np.nanmean(x_pos_target)
@@ -462,7 +461,7 @@ class TimeSeriesData:
         # Target and background counts per second
         exptimes = np.asarray(exptimes)
         target_flux = np.asarray(target_flux)
-        self.target_flux_sec = target_flux / exptimes
+        target_flux_sec = target_flux / exptimes
         background_in_target_sec = np.asarray(background_in_object) / exptimes
 
         # CCD gain
@@ -472,40 +471,40 @@ class TimeSeriesData:
 
         # Sigma readout noise
         ron = np.sqrt(readout_noise)
-        self.sigma_ron = -2.5 * np.log10((self.target_flux_sec * ccd_gain * exptimes - ron)
-                                         / (self.target_flux_sec * ccd_gain * exptimes))
+        self.sigma_ron = -2.5 * np.log10((target_flux_sec * ccd_gain * exptimes - ron)
+                                         / (target_flux_sec * ccd_gain * exptimes))
 
         # Sigma photon noise
         # self.sigma_phot = 1 / np.sqrt(self.target_flux_sec * ccd_gain * self.exptimes)
-        self.sigma_phot = -2.5 * np.log10((self.target_flux_sec * ccd_gain * exptimes
-                                           - np.sqrt(self.target_flux_sec * ccd_gain
+        self.sigma_phot = -2.5 * np.log10((target_flux_sec * ccd_gain * exptimes
+                                           - np.sqrt(target_flux_sec * ccd_gain
                                                      * exptimes))
-                                          / (self.target_flux_sec * ccd_gain * exptimes))
+                                          / (target_flux_sec * ccd_gain * exptimes))
 
         # Sigma sky-background noise
-        self.sigma_sky = -2.5 * np.log10((self.target_flux_sec * ccd_gain * exptimes
+        self.sigma_sky = -2.5 * np.log10((target_flux_sec * ccd_gain * exptimes
                                           - np.sqrt(background_in_target_sec * ccd_gain
                                                     * exptimes))
-                                         / (self.target_flux_sec * ccd_gain * exptimes))
+                                         / (target_flux_sec * ccd_gain * exptimes))
 
         # Total photometric error for 1 mag in one observation
         self.sigma_total = np.sqrt(self.sigma_phot**2.0 + self.sigma_ron**2.0
                                    + self.sigma_sky**2.0)
 
         # Signal to noise: shot, sky noise (per second) and readout
-        S_to_N_obj_sec = self.target_flux_sec / np.sqrt(self.target_flux_sec
-                                                        + background_in_target_sec
-                                                        + readout_noise
-                                                        / (ccd_gain * exptimes))
+        S_to_N_obj_sec = target_flux_sec / np.sqrt(target_flux_sec
+                                                   + background_in_target_sec
+                                                   + readout_noise
+                                                   / (ccd_gain * exptimes))
         # Convert SN_sec to actual SN
         S_to_N_obj = S_to_N_obj_sec * np.sqrt(ccd_gain * exptimes)
 
         # Get the flux of each reference star
-        self.reference_star_flux_sec = list()
+        reference_star_flux_sec = list()
         background_in_ref_star_sec = list()
         for ref_star in self.list_reference_stars:
 
-            logger.info(f"Starting aperture photometry on ref_star {ref_star}\n")
+            self.logger.info(f"Starting aperture photometry on ref_star {ref_star}\n")
 
             (refer_flux,
              background_in_ref_star,
@@ -515,14 +514,14 @@ class TimeSeriesData:
              obs_dates) = self.do_photometry(ref_star,
                                              self.data_directory,
                                              self.search_pattern)
-            self.reference_star_flux_sec.append(np.asarray(refer_flux) / exptimes)
+            reference_star_flux_sec.append(np.asarray(refer_flux) / exptimes)
             background_in_ref_star_sec.append(np.asarray(background_in_ref_star) / exptimes)
-            logger.info(f"Finished aperture photometry on ref_star {ref_star}\n")
+            self.logger.info(f"Finished aperture photometry on ref_star {ref_star}\n")
 
-        self.reference_star_flux_sec = np.asarray(self.reference_star_flux_sec)
+        self.reference_star_flux_sec = np.asarray(reference_star_flux_sec)
         background_in_ref_star_sec = np.asarray(background_in_ref_star_sec)
 
-        sigma_squared_ref = (self.reference_star_flux_sec * exptimes
+        sigma_squared_ref = (reference_star_flux_sec * exptimes
                              + background_in_ref_star_sec * exptimes
                              + readout_noise)
 
@@ -550,7 +549,7 @@ class TimeSeriesData:
         differential_flux = target_flux / ref_flux_averaged
 
         # Normalized relative flux
-        self.normalized_flux = differential_flux / np.nanmedian(differential_flux)
+        normalized_flux = differential_flux / np.nanmedian(differential_flux)
 
         # Find Differential S/N for object and ensemble
         S_to_N_diff = 1 / np.sqrt(S_to_N_obj**-2 + S_to_N_ref**-2)
@@ -560,9 +559,9 @@ class TimeSeriesData:
         exec_time = end - start
 
         # Print when all of the analysis ends
-        logger.info(f"Differential photometry of {self.star_id} has been finished, "
-                    f"with {len(self.good_frames_list)} frames "
-                    f"of camera {self.instrument} (run time: {exec_time:.3f} sec)\n")
+        self.logger.info(f"Differential photometry of {self.star_id} has been finished, "
+                         f"with {len(self.good_frames_list)} frames "
+                         f"of camera {self.instrument} (run time: {exec_time:.3f} sec)\n")
 
         # Output directory
         self.output_dir_name = "TimeSeries_Analysis"
@@ -581,7 +580,7 @@ class TimeSeriesData:
                            f"{np.nanmedian(S_to_N_obj)} {np.nanmedian(S_to_N_ref)} "
                            f"{np.nanmedian(S_to_N_diff)}\n")
 
-        return (self.times, self.target_flux_sec, self.sigma_total)
+        return (times, normalized_flux, self.sigma_total)
 
 
 class LightCurve(TimeSeriesData):
@@ -599,24 +598,24 @@ class LightCurve(TimeSeriesData):
                                          aperture_radius=aperture_radius,
                                          telescope=telescope)
 
-    def clip_outliers(self, sigma=5.0, sigma_lower=None, sigma_upper=None,
+    def clip_outliers(self, time, flux, sigma=5.0, sigma_lower=None, sigma_upper=None,
                       return_mask=False, **kwargs):
         """ Covenience wrapper for sigma_clip function from astropy.
         """
 
-        clipped_data = sigma_clip(data=self.normalized_flux,
+        clipped_data = sigma_clip(data=flux,
                                   sigma=sigma, maxiters=10,
                                   cenfunc=np.median,
                                   masked=True,
                                   copy=True)
 
         mask = clipped_data.mask
-        normalized_flux_clipped = self.normalized_flux[~mask]
-        times_clipped = self.times[~mask]
+        normalized_flux_clipped = flux[~mask]
+        times_clipped = time[~mask]
 
         if return_mask:
             return normalized_flux_clipped, times_clipped, mask
-        return normalized_flux_clipped, times_clipped
+        return times_clipped, normalized_flux_clipped
 
     def detrend_lightcurve(self, times, flux, R_star=None,
                            M_star=None, Porb=None):
@@ -643,7 +642,7 @@ class LightCurve(TimeSeriesData):
         detrended and trended flux : numpy array
         """
 
-        logger.info("Removing trends from time series data\n")
+        self.logger.info("Removing trends from time series data\n")
         # Compute the transit duration
         transit_dur = t14(R_s=R_star, M_s=M_star,
                           P=Porb, small_planet=False)
@@ -689,7 +688,10 @@ class LightCurve(TimeSeriesData):
         return binned_flux, binned_times
 
     # @logged
-    def plot(self, bins=4, detrend=False, R_star=None, M_star=None, Porb=None):
+    def plot(self, time, flux, sigma=10,
+             bins=4, detrend=False,
+             R_star=None, M_star=None,
+             Porb=None):
         """Plot a light curve using the flux time series
 
         Parameters
@@ -714,19 +716,17 @@ class LightCurve(TimeSeriesData):
 
         pd.plotting.register_matplotlib_converters()
 
-        self.get_relative_flux()
+        time, flux = self.clip_outliers(time, flux, sigma=sigma)
 
-        flux, times = self.clip_outliers(sigma=10)
-
-        model = transitleastsquares(times, flux)
+        model = transitleastsquares(time, flux)
         results = model.power()
 
-        print('Period', format(results.period, '.5f'), 'd')
-        print(len(results.transit_times), 'transit times in time series:',
-              ['{0:0.5f}'.format(i) for i in results.transit_times])
-        print('Transit depth', format(results.depth, '.5f'))
-        print('Best duration (days)', format(results.duration, '.5f'))
-        print('Signal detection efficiency (SDE):', results.SDE)
+        self.logger.info(f'Period: {results.period:.5f} d')
+        self.logger.info(f'{len(results.transit_times)} transit times in time series: '
+                         f'{[f"{i:0.5f}" for i in results.transit_times]}')
+        self.logger.info(f'Transit depth: {results.depth:.5f}')
+        self.logger.info(f'Best duration (days): {results.duration: .5f}')
+        self.logger.info(f'Signal detection efficiency (SDE): {results.SDE}')
 
         plt.figure()
         plt.plot(results.model_folded_phase, results.model_folded_model, color='red')
@@ -737,16 +737,16 @@ class LightCurve(TimeSeriesData):
         plt.savefig("prueba.png")
 
         if detrend:
-            flux, flux_tr = self.detrend_lightcurve(times, flux,
+            flux, flux_tr = self.detrend_lightcurve(time, flux,
                                                     R_star=R_star,
                                                     M_star=M_star,
                                                     Porb=Porb)
 
         # Standard deviation in ppm for the observation
-        std = np.nanstd(self.normalized_flux)
+        std = np.nanstd(flux)
 
         # Binned data and times
-        binned_flux, binned_times = self.bin_timeseries(flux, times, bins)
+        binned_flux, binned_times = self.bin_timeseries(flux, time, bins)
         std_binned = np.nanstd(binned_flux)
 
         # Total time for binsize
@@ -759,14 +759,14 @@ class LightCurve(TimeSeriesData):
         lightcurve_name = os.path.join(lightcurves_directory, "Lightcurve_camera_"
                                        f"{self.instrument}_r{self.r}.png")
 
-        fig, ax = plt.subplots(4, 1,
+        fig, ax = plt.subplots(3, 1,
                                sharey="row", sharex="col", figsize=(10, 10))
         fig.suptitle(f"Differential Photometry\nTarget Star {self.star_id}, "
                      f"Aperture Radius = {self.r} pix", fontsize=13)
 
-        ax[3].plot(times, flux, "k.", ms=3,
+        ax[2].plot(time, flux, "k.", ms=3,
                    label=f"NBin = {self.exptime:.3f} d, std = {std:.2%}")
-        ax[3].plot(binned_times, binned_flux, "ro", ms=4,
+        ax[2].plot(binned_times, binned_flux, "ro", ms=4,
                    label=f"NBin = {nbin_tot:.3f} d, std = {std_binned:.2%}")
         # ax[3].errorbar(self.times, self.normalized_flux, yerr=self.sigma_total,
         #                fmt="none", ecolor="k", elinewidth=0.8,
@@ -775,26 +775,17 @@ class LightCurve(TimeSeriesData):
         #                "\sigma_{\mathrm{read}}^{2}}$",
         #                capsize=0.0)
 
-        ax[3].set_ylabel("Relative\nFlux", fontsize=13)
+        ax[2].set_ylabel("Relative\nFlux", fontsize=13)
         # ax[3].legend(fontsize=9.0, loc="lower left", ncol=3, framealpha=1.0)
         # ax[3].set_ylim((0.9995, 1.0004))
-        ax[3].ticklabel_format(style="plain", axis="both", useOffset=False)
+        ax[2].ticklabel_format(style="plain", axis="both", useOffset=False)
         loc_x3 = plticker.MultipleLocator(base=5)  # this locator puts ticks at regular intervals
-        ax[3].xaxis.set_major_locator(loc_x3)
-        ax[3].xaxis.set_major_formatter(plticker.FormatStrFormatter('%.1f'))
+        ax[2].xaxis.set_major_locator(loc_x3)
+        ax[2].xaxis.set_major_formatter(plticker.FormatStrFormatter('%.1f'))
 
-        # Plot of target star flux
-        ax[2].plot(self.times,
-                   self.target_flux_sec / np.nanmean(self.target_flux_sec),
-                   "ro", label=f"Target star {self.star_id}", lw=0.0, ms=1.3)
-        ax[2].set_ylabel("Normalized\nFlux", fontsize=13)
-        ax[2].legend(fontsize=8.6, loc="lower left", ncol=1,
-                     framealpha=1.0, frameon=True)
-        ax[2].set_ylim((0.9, 1.05))
-
-        ax[0].plot(self.times, self.x_pos_target, "ro-",
+        ax[0].plot(time, self.x_pos_target, "ro-",
                    label="dx [Dec axis]", lw=0.5, ms=1.2)
-        ax[0].plot(self.times, self.y_pos_target, "go-",
+        ax[0].plot(time, self.y_pos_target, "go-",
                    label="dy [RA axis]", lw=0.5, ms=1.2)
         ax[0].set_ylabel(r"$\Delta$ Pixel", fontsize=13)
         ax[0].legend(fontsize=8.6, loc="lower left", ncol=2, framealpha=1.0)
@@ -806,7 +797,7 @@ class LightCurve(TimeSeriesData):
             # Colors for comparison stars
             # colors = ["blue", "magenta", "green", "cyan", "firebrick"]
 
-            ax[1].plot(self.times, self.reference_star_flux_sec[counter]
+            ax[1].plot(time, self.reference_star_flux_sec[counter]
                        / np.nanmean(self.reference_star_flux_sec[counter]),
                        "o", ms=1.3, label=f"Star {self.list_reference_stars[counter]}")
             ax[1].set_ylabel("Normalized\nFlux", fontsize=13)
@@ -815,8 +806,7 @@ class LightCurve(TimeSeriesData):
                          ncol=len(self.list_reference_stars),
                          framealpha=1.0, frameon=True)
 
-        ax[3].text(0.97, 0.07, "d)", fontsize=11, transform=ax[3].transAxes)
-        ax[2].text(0.97, 0.07, "c)", fontsize=11, transform=ax[2].transAxes)
+        ax[2].text(0.97, 0.07, "d)", fontsize=11, transform=ax[2].transAxes)
         ax[1].text(0.97, 0.07, "b)", fontsize=11, transform=ax[1].transAxes)
         ax[0].text(0.97, 0.07, "a)", fontsize=11, transform=ax[0].transAxes)
 
@@ -834,7 +824,7 @@ class LightCurve(TimeSeriesData):
         plt.xticks(rotation=30, size=8.0)
         plt.savefig(lightcurve_name)
 
-        logger.info(f"The light curve of {self.star_id} was plotted")
+        self.logger.info(f"The light curve of {self.star_id} was plotted")
 
         fig, ax = plt.subplots(1, 1,
                                sharey="row", sharex="col", figsize=(13, 10))
@@ -842,7 +832,7 @@ class LightCurve(TimeSeriesData):
                      r"($m_\mathrm{V}=10.9$)\n"
                      f"Huntsman Defocused Camera {self.instrument}, G Band Filter\n"
                      f"Sector 2", fontsize=15)
-        ax.plot_date(self.times, self.sigma_total * 100, "k-",
+        ax.plot_date(time, self.sigma_total * 100, "k-",
                      label=r"$\sigma_{\mathrm{total}}$")
         ax.plot_date(self.times, self.sigma_phot * 100, color="firebrick", marker=None,
                      ls="-", label=r"$\sigma_{\mathrm{phot}}$")
