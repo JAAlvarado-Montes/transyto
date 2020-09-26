@@ -20,5 +20,4 @@ log.addHandler(logging.StreamHandler())
 
 from .version import __version__
 from .transyto import *
-from .utils import *
-from .wcs import *
+from transyto.utils import *
