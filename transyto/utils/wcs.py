@@ -1,4 +1,4 @@
-from .utils import search_files_across_directories, getheader
+from transyto.utils import search_files_across_directories, getheader
 from astropy.wcs import WCS
 
 from warnings import warn
