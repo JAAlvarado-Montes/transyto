@@ -10,3 +10,4 @@ photutils>=0.7
 pandas
 uncertainties
 transitleastsquares
+ccdproc

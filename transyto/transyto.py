@@ -31,7 +31,7 @@ from matplotlib import dates
 
 from photutils.aperture.circle import CircularAperture, CircularAnnulus
 from photutils import aperture_photometry
-from photutils import centroid_2dg, centroid_1dg, centroid_com
+from photutils.centroids import centroid_2dg, centroid_1dg, centroid_com
 
 from . import PACKAGEDIR
 from transyto.utils import (
