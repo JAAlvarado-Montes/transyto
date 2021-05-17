@@ -1,4 +1,7 @@
+from contextlib import suppress
+
 import requests
+
 
 planeturl = "https://exo.mast.stsci.edu/api/v0.1/exoplanets/"
 dvurl = "https://exo.mast.stsci.edu/api/v0.1/dvdata/tess/"
@@ -32,4 +35,5 @@ class Data:
 
         self.planet_prop = r.json()
 
-        return self.planet_prop[0]
+        with suppress(IndexError):
+            return self.planet_prop[0]

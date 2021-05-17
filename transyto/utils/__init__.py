@@ -7,7 +7,6 @@ import subprocess
 
 import functools
 
-from astropy.io import fits
 from natsort import natsorted
 from warnings import warn
 
@@ -61,11 +60,11 @@ def fpack(fits_fname, unpack=False, verbose=False):
 
     if unpack:
         fpack = shutil.which('funpack')
-        run_cmd = [fpack, '-D', fits_fname]
+        cmd = [fpack, '-D', fits_fname]
         out_file = fits_fname.replace('.fz', '')
     else:
         fpack = shutil.which('fpack')
-        run_cmd = [fpack, '-D', '-Y', fits_fname]
+        cmd = [fpack, '-D', '-Y', fits_fname]
         out_file = fits_fname.replace('.fits', '.fits.fz')
 
     try:
@@ -75,15 +74,9 @@ def fpack(fits_fname, unpack=False, verbose=False):
         return fits_fname
 
     if verbose:
-        print("fpack command: {}".format(run_cmd))
+        print("fpack command: {}".format(cmd))
 
-    proc = subprocess.Popen(run_cmd, stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, universal_newlines=True)
-    try:
-        output, errs = proc.communicate(timeout=5)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        output, errs = proc.communicate()
+    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
 
     return out_file
 
@@ -104,48 +97,6 @@ def funpack(*args, **kwargs):
         str: Path to uncompressed FITS file.
     """
     return fpack(*args, unpack=True, **kwargs)
-
-
-def getheader(fn, *args, **kwargs):
-    """Get the FITS header.
-
-    Small wrapper around `astropy.io.fits.getheader` to auto-determine
-    the FITS extension. This will return the header associated with the
-    image. If you need the compression header information use the astropy
-    module directly.
-
-    Args:
-        fn (str): Path to FITS file.
-        *args: Passed to `astropy.io.fits.getheader`.
-        **kwargs: Passed to `astropy.io.fits.getheader`.
-
-    Returns:
-        `astropy.io.fits.header.Header`: The FITS header for the data.
-    """
-    ext = 0
-    if fn.endswith('.fz'):
-        ext = 1
-    return fits.getheader(fn, ext=ext)
-
-
-def getval(fn, *args, **kwargs):
-    """Get a value from the FITS header.
-
-    Small wrapper around `astropy.io.fits.getval` to auto-determine
-    the FITS extension. This will return the value from the header
-    associated with the image (not the compression header). If you need
-    the compression header information use the astropy module directly.
-
-    Args:
-        fn (str): Path to FITS file.
-
-    Returns:
-        str or float: Value from header (with no type conversion).
-    """
-    ext = 0
-    if fn.endswith('.fz'):
-        ext = 1
-    return fits.getval(fn, *args, ext=ext, **kwargs)
 
 
 def logged(func):
