@@ -8,17 +8,17 @@ log = logging.getLogger(__name__)
 __all__ = []
 
 
-def compute_scintillation(telescope_aperture, airmass, altitude, exptime):
+def compute_scintillation(telescope_aperture, telescope_altitude, airmass, exptime):
     """Compute scintillation noise for a given observation
 
     Parameters
     ----------
-    aperture : float
+    telescope_aperture : float
         Aperture of the telescope [m]
+    telescpe_altitude : float
+        Altitude of the telescope [m]
     airmass : float or array
         airmass of the observation
-    altitude : float
-        Altitude of the telescope [m]
     exptime : float or array
         Exposure time of the observation [s]
 
@@ -28,7 +28,7 @@ def compute_scintillation(telescope_aperture, airmass, altitude, exptime):
        Amplitude error (sigma) of scintillation for a given observation.
     """
     scintillation = (0.004 * telescope_aperture**(-2. / 3.) * airmass**(7. / 4.)
-                     * np.exp(-altitude / 8000.) * (2 * exptime)**(-0.5))
+                     * np.exp(-telescope_altitude / 8000.) * (2 * exptime)**(-0.5))
 
     return scintillation
 
@@ -55,7 +55,7 @@ def compute_noises(gain, exptime, target_flux_sec, target_background_sec,
     Returns
     -------
     TYPE
-        Description
+        Amplitude errors for photon, background, and readout noise.
     """
     # Sigma of photon noise
     target_signal = target_flux_sec * gain * exptime
