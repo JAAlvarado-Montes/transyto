@@ -8,7 +8,7 @@ dvurl = "https://exo.mast.stsci.edu/api/v0.1/dvdata/tess/"
 header = {}
 
 
-class Data:
+class StarData:
     """Data from MAST catalog"""
 
     def __init__(self, star_id):

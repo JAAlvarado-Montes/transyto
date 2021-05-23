@@ -12,7 +12,7 @@ from warnings import warn
 
 log = logging.getLogger(__name__)
 
-__all__ = ['search_files_across_directories', 'logged']
+__all__ = ['search_files_across_directories', 'logged', 'fpack', 'funpack']
 
 
 def search_files_across_directories(search_directory, search_pattern):

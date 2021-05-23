@@ -39,6 +39,10 @@ from transyto.utils import (
     catalog
 )
 from transyto.utils.data import get_data, get_header
+from transyto.noise import (
+    compute_scintillation,
+    compute_noises
+)
 
 __all__ = ['TimeSeriesData', 'LightCurve']
 
@@ -148,6 +152,10 @@ class TimeSeriesData:
         return self.get_keyword_value().instr
 
     @property
+    def telescope_altitude(self):
+        return self.get_keyword_value().altitude
+
+    @property
     def gain(self):
         return self.get_keyword_value().gain
 
@@ -196,11 +204,11 @@ class TimeSeriesData:
         except AttributeError:
             self.logger.error("Header keyword does not exist")
             return default
-        exp, obstime, instr, readout, gain, airmass = kw_values
+        exp, obstime, instr, readout, gain, airmass, altitude = kw_values
 
-        Outputs = namedtuple("Outputs", "exp obstime instr readout gain airmass")
+        Outputs = namedtuple("Outputs", "exp obstime instr readout gain airmass altitude")
 
-        return Outputs(exp, obstime, instr, readout, gain, airmass)
+        return Outputs(exp, obstime, instr, readout, gain, airmass, altitude)
 
     def _slice_data(self, data, origin, width):
         y, x = origin
@@ -401,7 +409,7 @@ class TimeSeriesData:
         # List of good frames
         self.good_frames_list = list()
 
-        for fn in tqdm(fits_files):
+        for fn in tqdm(fits_files[:60]):
             # Get data, header and WCS of fits files with any extension
             data = get_data(fn)
             self.header = get_header(fn)
@@ -489,36 +497,35 @@ class TimeSeriesData:
         exptimes = np.asarray(exptimes)
         target_flux = np.asarray(target_flux)
         target_flux_sec = target_flux / exptimes
-        background_in_target_sec = np.asarray(background_in_object) / exptimes
+        target_background_sec = np.asarray(background_in_object) / exptimes
 
         # CCD gain
         ccd_gain = self.gain
 
-        readout_noise = (self.readout * self.r)**2 * np.pi * np.ones(len(self.good_frames_list))
-
-        # Sigma readout noise
-        s_target = target_flux_sec * ccd_gain * exptimes
-        ron = np.sqrt(readout_noise)
-        self.sigma_ron = -2.5 * np.log10((s_target - ron) / s_target)
+        noise_sources = compute_noises(ccd_gain, exptimes, target_flux_sec,
+                                       target_background_sec, self.readout, self.r)
 
         # Sigma photon noise
-
-        self.sigma_phot = -2.5 * np.log10((s_target - np.sqrt(s_target)) / s_target)
+        self.sigma_phot = noise_sources.sigma_photon
 
         # Sigma sky-background noise
-        self.sigma_sky = -2.5 * np.log10((s_target - np.sqrt(background_in_target_sec * ccd_gain
-                                                             * exptimes)) / s_target)
+        self.sigma_sky = noise_sources.sigma_sky
+
+        # Sigma readout noise
+        self.sigma_ron = noise_sources.sigma_readout
 
         # Sigma scintillation
-        self.sigma_scint = 0.004 * 0.143**(-2. / 3) * (2 * exptimes)**(-1. / 2) * self.airmass**(7. / 4) * np.exp(-1165. / 8000)
+        self.sigma_scint = compute_scintillation(0.143, self.airmass,
+                                                 self.telescope_altitude, exptimes)
 
         # Total photometric error for 1 mag in one observation
         self.sigma_total = np.sqrt(self.sigma_phot**2.0 + self.sigma_ron**2.0
                                    + self.sigma_sky**2.0 + self.sigma_scint**2.0)
 
         # Signal to noise: shot, sky noise (per second) and readout
-        S_to_N_obj_sec = target_flux_sec / np.sqrt(target_flux_sec + background_in_target_sec
-                                                   + readout_noise / (ccd_gain * exptimes))
+        S_to_N_obj_sec = target_flux_sec / np.sqrt(target_flux_sec + target_background_sec
+                                                   + (self.readout * self.r)**2 * np.pi
+                                                   / (ccd_gain * exptimes))
         # Convert SN_sec to actual SN
         S_to_N_obj = S_to_N_obj_sec * np.sqrt(ccd_gain * exptimes)
 
@@ -555,14 +562,14 @@ class TimeSeriesData:
         self.reference_star_flux_sec = np.asarray(reference_star_flux_sec)
         background_in_ref_star_sec = np.asarray(background_in_ref_star_sec)
 
-        sigma_squared_ref = (reference_star_flux_sec * exptimes
-                             + background_in_ref_star_sec * exptimes
-                             + readout_noise)
+        # sigma_squared_ref = (reference_star_flux_sec * exptimes
+        #                      + background_in_ref_star_sec * exptimes
+        #                      + readout_noise)
 
-        weights_ref_stars = 1.0 / sigma_squared_ref
+        # weights_ref_stars = 1.0 / sigma_squared_ref
 
-        ref_flux_averaged = np.average(self.reference_star_flux_sec * exptimes,
-                                       weights=weights_ref_stars, axis=0)
+        ref_flux_averaged = np.average(self.reference_star_flux_sec * exptimes, axis=0)
+                                       #weights=weights_ref_stars, axis=0)
 
         # Integrated flux per sec for ensemble of reference stars
         total_reference_flux_sec = np.sum(self.reference_star_flux_sec, axis=0)
@@ -573,7 +580,7 @@ class TimeSeriesData:
         # S/N for reference star per second
         S_to_N_ref_sec = total_reference_flux_sec / np.sqrt(total_reference_flux_sec
                                                             + total_reference_bkg_sec
-                                                            + readout_noise
+                                                            + (self.readout * self.r)**2 * np.pi
                                                             / (ccd_gain * exptimes))
         # Convert S/N per sec for ensemble to total S/N
         S_to_N_ref = S_to_N_ref_sec * np.sqrt(ccd_gain * exptimes)
@@ -648,7 +655,7 @@ class LightCurve(TimeSeriesData):
             return normalized_flux_clipped, times_clipped, errors_clipped, mask
         return times_clipped, normalized_flux_clipped, errors_clipped
 
-    def detrend_data(self, time, flux, R_star, M_star, Porb=None):
+    def detrend_data(self, time, flux, R_star=None, M_star=None, Porb=None):
         """Detrend time-series data
 
         Parameters
@@ -669,14 +676,13 @@ class LightCurve(TimeSeriesData):
         detrended and trended flux : numpy array
         """
 
-        self.logger.info("Now detrending the time series using queried "
-                         + f"M_s = {M_star} M_sun, R_s = {R_star} R_sun, and "
-                         + f"P_orb = {Porb} d found from previous model\n")
-
-        trend = scipy.signal.medfilt(flux, 25)
+        trend = scipy.signal.medfilt(flux, 15)
         detrended_flux = flux / trend
 
         if Porb is not None:
+            self.logger.info("Now detrending the time series using queried "
+                             + f"M_s = {M_star} M_sun, R_s = {R_star} R_sun, and "
+                             + f"P_orb = {Porb} d found from previous model\n")
 
             # Compute the transit duration
             transit_dur = t14(R_s=R_star, M_s=M_star,
@@ -777,7 +783,7 @@ class LightCurve(TimeSeriesData):
 
         pd.plotting.register_matplotlib_converters()
 
-        star_data = catalog.Data(self.star_id).query_from_mast()
+        star_data = catalog.StarData(self.star_id).query_from_mast()
 
         normalized_flux = flux / np.nanmedian(flux)
 
@@ -788,8 +794,8 @@ class LightCurve(TimeSeriesData):
         time_jd = time_object.jd - 2457000.0
 
         if detrend:
-            normalized_flux = self.detrend_data(time_jd, flux, R_star=star_data["Rs"],
-                                                M_star=star_data["Ms"], Porb=Porb)
+            normalized_flux = self.detrend_data(time_jd, flux)#, R_star=star_data["Rs"],
+                                                #M_star=star_data["Ms"], Porb=Porb)
 
         # Remove invalid values such as nan, inf, non, negative
         # time, flux = cleaned_array(time, flux)
@@ -813,6 +819,8 @@ class LightCurve(TimeSeriesData):
         ax[1].plot(time_jd, normalized_flux, "k.", ms=3,
                    label=f"NBin = {self.exptime:.1f} s, std = {std:.2%}")
 
+        fig.subplots_adjust(hspace=0.2)
+
         # Binned data and times
         if bins != 0:
             binned_times, binned_flux = self.bin_timeseries(time_jd, normalized_flux, bins)
@@ -830,7 +838,7 @@ class LightCurve(TimeSeriesData):
                        r"\sigma_{\mathrm{read}}^{2}}$", capsize=0.0)
 
         ax[1].set_ylabel("Relative Flux", fontsize=13)
-        ax[1].legend(fontsize=8.0, loc="lower left", ncol=3, framealpha=1.0)
+        ax[1].legend(fontsize=8.0, loc=(0.0, 1.0), ncol=3, framealpha=1.0, frameon=False)
 
         # ax[1].axvline(2278.0618, c="k", ls="--", alpha=0.5)
         # ax[1].axvline(2278.1241, c="k", ls="--", alpha=0.5)
@@ -909,7 +917,7 @@ class LightCurve(TimeSeriesData):
                                            f"{self.instrument}_r{self.r}.png")
 
             fig, ax = plt.subplots(1, 1, sharey="row", sharex="col", figsize=(8.5, 6.3))
-            ax.set_title(f"Noise Sources in {self.star_id} " r"($m_\mathrm{V}=10.3$)", fontsize=13)
+            ax.set_title(f"Noise Sources in {self.star_id} " r"($m_\mathrm{V}=10.0$)", fontsize=13)
             ax.plot_date(time_object.plot_date, self.sigma_total * 100, "k-",
                          label=r"$\sigma_{\mathrm{total}}$")
             ax.plot_date(time_object.plot_date, self.sigma_scint * 100,
