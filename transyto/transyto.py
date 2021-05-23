@@ -515,8 +515,8 @@ class TimeSeriesData:
         self.sigma_ron = noise_sources.sigma_readout
 
         # Sigma scintillation
-        self.sigma_scint = compute_scintillation(0.143, self.airmass,
-                                                 self.telescope_altitude, exptimes)
+        self.sigma_scint = compute_scintillation(0.143, self.telescope_altitude,
+                                                 self.airmass, exptimes)
 
         # Total photometric error for 1 mag in one observation
         self.sigma_total = np.sqrt(self.sigma_phot**2.0 + self.sigma_ron**2.0
