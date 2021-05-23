@@ -568,8 +568,7 @@ class TimeSeriesData:
 
         # weights_ref_stars = 1.0 / sigma_squared_ref
 
-        ref_flux_averaged = np.average(self.reference_star_flux_sec * exptimes, axis=0)
-                                       #weights=weights_ref_stars, axis=0)
+        ref_flux_averaged = np.average(self.reference_star_flux_sec * exptimes, axis=0)  # weights=weights_ref_stars, axis=0)
 
         # Integrated flux per sec for ensemble of reference stars
         total_reference_flux_sec = np.sum(self.reference_star_flux_sec, axis=0)
@@ -794,8 +793,7 @@ class LightCurve(TimeSeriesData):
         time_jd = time_object.jd - 2457000.0
 
         if detrend:
-            normalized_flux = self.detrend_data(time_jd, flux)#, R_star=star_data["Rs"],
-                                                #M_star=star_data["Ms"], Porb=Porb)
+            normalized_flux = self.detrend_data(time_jd, flux)  # , R_star=star_data["Rs"], M_star=star_data["Ms"], Porb=Porb)
 
         # Remove invalid values such as nan, inf, non, negative
         # time, flux = cleaned_array(time, flux)
