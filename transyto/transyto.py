@@ -17,8 +17,10 @@ from astropy.coordinates import SkyCoord
 from astropy.utils.exceptions import AstropyWarning
 from astropy.wcs import WCS
 from astropy.time import Time
-from astropy.stats import sigma_clipped_stats
-from astropy.stats import sigma_clip
+from astropy.nddata import NDData
+from astropy.table import Table
+from astropy.visualization import simple_norm
+from astropy.stats import sigma_clip, sigma_clipped_stats
 
 from transitleastsquares import transitleastsquares, cleaned_array
 from collections import namedtuple
@@ -27,18 +29,25 @@ from pathlib import Path
 from operator import itemgetter
 from wotan import flatten, t14
 from matplotlib import pyplot as plt
+from matplotlib.patches import Circle
 from matplotlib import dates
 
 from photutils.aperture.circle import CircularAperture, CircularAnnulus
 from photutils import aperture_photometry
 from photutils.centroids import centroid_2dg, centroid_1dg, centroid_com
+from photutils.psf import extract_stars
+from photutils.psf.epsf import EPSFBuilder
 
 from . import PACKAGEDIR
 from transyto.utils import (
     search_files_across_directories,
     catalog
 )
-from transyto.utils.data import get_data, get_header
+from transyto.utils.data import (
+    get_data,
+    get_header,
+    get_value
+)
 from transyto.noise import (
     compute_scintillation,
     compute_noises
@@ -103,7 +112,7 @@ class TimeSeriesData:
         self.dec_ref_stars = dec_ref_stars
 
         # Centroid bow width for centroid function.
-        self._box_width = 2 * (self.r + 1)
+        self._box_width = 2. * (self.r + 1)
 
         pos_answers = ['True', 'true', 'yes', 'y', 'Yes', True]
         if from_coordinates in pos_answers:
@@ -212,8 +221,8 @@ class TimeSeriesData:
 
     def _slice_data(self, data, origin, width):
         y, x = origin
-        cutout = data[np.int(x - width / 2):np.int(x + width / 2),
-                      np.int(y - width / 2):np.int(y + width / 2)]
+        cutout = data[np.int(x - width / 2.):np.int(x + width / 2.),
+                      np.int(y - width / 2.):np.int(y + width / 2.)]
         return cutout
 
     def _mask_data(self, image, sigma=1.0):
@@ -280,7 +289,215 @@ class TimeSeriesData:
                 new_y = prior_y
                 new_x = prior_x
 
-            return new_y, new_x
+            return new_x, new_y
+
+    def make_effective_psf(self, nddatas, tables, plot_psf_profile=True):
+        # Extract stars from all the frames
+        stars = extract_stars(nddatas, tables, size=self.r_out)
+
+        # Build the ePSF from all the cutouts extracted
+        epsf_builder = EPSFBuilder(oversampling=1., maxiters=15, progress_bar=True,
+                                   recentering_boxsize=self.r_out)
+        epsf, fitted_star = epsf_builder(stars)
+
+        masked_eff_psf = self._mask_data(epsf.data)
+
+        x_cen, y_cen = self._estimate_centroid_via_2dgaussian(epsf.data, mask=masked_eff_psf.mask)
+
+        # Output directory for ePSF
+        output_directory = self.data_directory + "ePSF"
+        os.makedirs(output_directory, exist_ok=True)
+
+        epsf_name = os.path.join(output_directory, "ePSF.png")
+
+        # Add subplot for fitted psf star
+        fig = plt.figure(figsize=(6.5, 6.5))
+        ax = fig.add_subplot(111)
+        # ax.set_title(f"Huntsman {cam} Camera {instrume}\n"
+        #             f"Star {star_id} " r"($m_\mathrm{V}=10.9$)", fontsize=15)
+        norm = simple_norm(epsf.data, "sqrt", percent=99.9)
+        epsf_img = ax.imshow(epsf.data, norm=norm, cmap="viridis", origin="lower")
+        ax.scatter(x_cen, y_cen, c='k', marker='+', s=100)
+        # ax.legend(loc="lower left", ncol=2, fontsize=10, framealpha=True)
+
+        # Draw the apertures of object and background
+        circ = Circle((x_cen, y_cen), self.r, alpha=0.7, facecolor="none",
+                      edgecolor="k", lw=2.0, zorder=3)
+        circ1 = Circle((x_cen, y_cen), self.r_in, alpha=0.7, facecolor="none",
+                       edgecolor="r", ls="--", lw=2.0, zorder=3)
+        circ2 = Circle((x_cen, y_cen), self.r_out, alpha=0.7, facecolor="none",
+                       edgecolor="r", ls="--", lw=2.0, zorder=3)
+        # ax.text(x_cen, self.r_out - self.r_in - 1.0, "Local Sky Background", color="w",
+        #         ha="center", fontsize=13.0, zorder=5)  # 8.7
+
+        n, radii = 50, [self.r_in, self.r_out]
+        theta = np.linspace(0, 2 * np.pi, n, endpoint=True)
+        xs = np.outer(radii, np.cos(theta))
+        ys = np.outer(radii, np.sin(theta))
+
+        # in order to have a closed area, the circles
+        # should be traversed in opposite directions
+        xs[1, :] = xs[1, ::-1]
+        ys[1, :] = ys[1, ::-1]
+
+        # ax = plt.subplot(111, aspect='equal')
+        ax.fill(np.ravel(xs) + x_cen, np.ravel(ys) + y_cen, facecolor="gray", alpha=0.6, zorder=4)
+        ax.tick_params(axis="both", which="major", labelsize=15)
+        ax.add_patch(circ)
+        ax.add_patch(circ1)
+        ax.add_patch(circ2)
+        ax.set_xlabel("X Pixels", fontsize=15)
+        ax.set_ylabel("Y Pixels", fontsize=15)
+        ax.set_xlim((0.0, self.r_out))
+        ax.set_ylim((0.0, self.r_out))
+
+        # Colorbar for the whole figure and new axes for it
+        # fig.colorbar(epsf_img, orientation="vertical")
+
+        fig.savefig(epsf_name, dpi=300)
+
+        if plot_psf_profile:
+            projections_list = list()
+            sl = self.r
+            pr = 5
+            for nd in nddatas:
+                projection_x = nd.data[np.int((x_cen - sl)):np.int(2.3 * (x_cen + sl)),
+                                       np.int(y_cen - pr):np.int(y_cen + pr)]
+                projection_y = nd.data[np.int(x_cen - pr):np.int(x_cen + pr),
+                                       np.int((y_cen - sl)):np.int(2.3 * (y_cen + sl))]
+                projection_x = np.mean(projection_x, axis=1)
+                projection_y = np.mean(projection_y, axis=0)
+
+                projection_average = (projection_x + projection_y) / 2
+
+                projections_list.append(np.asarray(projection_average))
+
+            # Name of PSF profile image
+            fig_slices_name = os.path.join(output_directory, "{}_{}_profile.png".
+                                           format(self.instrument, self.star_id))
+
+            projection_average = np.sum(projections_list, axis=0) / len(projections_list)
+            psf_half = (np.max(projection_average) + np.min(projection_average)) / 2
+            pixs = np.linspace(-sl, sl, len(projection_average))
+
+            peaks, _ = scipy.signal.find_peaks(projection_average)
+            results_half = scipy.signal.peak_widths(projection_average, peaks, rel_height=0.5)
+
+            idx_n, idx_p = -np.max(results_half[0]) / 4, np.max(results_half[0]) / 4
+
+            fig = plt.figure(figsize=(6.5, 6.5))
+            ax = fig.add_subplot(111)
+            plt.title(f"PSF profile of {self.star_id} " r"($m_\mathrm{V}=10.0$)", fontsize=15)
+            ax.plot(pixs, projection_average, "k-", ms=3)
+            # ax.axhline(y=psf_half, xmin=0.36, xmax=0.67, c="r", ls="--", lw=1.5)
+            ax.axvline(x=idx_n, c="b", ls="-.", lw=1.5)
+            ax.axvline(x=idx_p, c="b", ls="-.", lw=1.5)
+            ax.axvspan(idx_n, idx_p, facecolor='blue', alpha=0.15)
+            ax.text(idx_p + 0.4, psf_half, rf"FWHM$\approx${np.max(results_half[0]) / 2:.3f} pix",
+                    color="k", fontsize=13)
+
+            ax.tick_params(axis="both", which="major", labelsize=15)
+            ax.set_xlabel("Pixels", fontsize=15)
+            ax.set_ylabel("Counts", fontsize=15)
+            ax.grid(alpha=0.5)
+            fig.savefig(fig_slices_name, dpi=300)
+
+    # def plot_cutouts(y, x, data_directory, search_pattern):
+    #     """Make an effective psf and extract cutouts of a given star
+
+    #     Parameters
+    #     ----------
+    #     star_id : string,
+    #         Name of the star to find the positions
+    #     data_directory : list
+    #             list of files (frames) where we want to get the counts
+    #     search_pattern : string
+    #             pattern to search files
+    #     cutouts_size : int, optional
+    #         Number of pixels to extract cutouts of stars
+    #     make_cutout_images : bool, optional
+    #         Create new images with the star cutouts
+    #     """
+    #     for fn in fits_files[0:50]:
+    #         ext = 0
+    #         if fn.endswith(".fz"):
+    #             ext = 1
+    #         data, header = get_data(fn, header=True, ext=ext)
+
+    #         x_pos = list()
+    #         y_pos = list()
+
+    #         wcs = WCS(header)
+    #         if wcs.is_celestial:
+    #             box_w = 40
+    #             star_cutout = data[np.int(x) - box_w:np.int(x) + box_w,
+    #                                np.int(y) - box_w:np.int(y) + box_w]
+
+    #         else:
+    #             continue
+
+    #         positions = Table()
+    #         positions["x"] = x_pos
+    #         positions["y"] = y_pos
+
+    #         # Output directory for all the cutouts
+    #         output_directory = data_directory + "Cutouts"
+    #         os.makedirs(output_directory, exist_ok=True)
+
+    #         filename, extension = splitext_(os.path.basename(fn))
+
+    #         # Name of centroid image
+    #         fig_cutouts_name = os.path.join(output_directory, "{}_{}_{}_centroid.png".
+    #                                         format(header["INSTRUME"],
+    #                                                star_id, filename))
+
+    #         # Add subplot for normal star
+    #         instrume = header["INSTRUME"]
+    #         fig, ax = plt.subplots(figsize=(6.5, 6.5))
+    #         ax.set_title(f"Huntsman {cam} Camera {instrume}\n"
+    #                      f"Star {star_id} " r"($m_\mathrm{V}=10.9$)", fontsize=15)
+    #         norm = simple_norm(star_cutout, "sqrt", percent=99.7)
+    #         # ax0.imshow(star[0], norm=norm, origin="lower", cmap="viridis")
+    #         ax.imshow(star_cutout, norm=norm, origin="lower", cmap="viridis")
+    #         ax.scatter(x_cen, y_cen, c='k', marker='+', s=100)
+    #         # ax.legend(loc="lower left", ncol=2, fontsize=13, framealpha=True)
+
+    #         # Draw the apertures of object and background
+    #         r_in = r + 10
+    #         r_out = r + 20
+    #         circ = Circle((x_cen, y_cen), r, alpha=0.7, facecolor="none",
+    #                       edgecolor="k", lw=2.0, zorder=3)
+    #         circ1 = Circle((x_cen, y_cen), r_in, alpha=0.7, facecolor="none",
+    #                        edgecolor="r", ls="--", lw=2.0, zorder=3)
+    #         circ2 = Circle((x_cen, y_cen), r_out, alpha=0.7, facecolor="none",
+    #                        edgecolor="r", ls="--", lw=2.0, zorder=3)
+    #         ax.text(x_cen, r_out - (r_in / 9.0), "Local Sky Background", color="w",
+    #                 ha="center", fontsize=13.0, zorder=5)  # 8.7
+
+    #         n, radii = 50, [r_in, r_out]
+    #         theta = np.linspace(0, 2 * np.pi, n, endpoint=True)
+    #         xs = np.outer(radii, np.cos(theta))
+    #         ys = np.outer(radii, np.sin(theta))
+
+    #         # in order to have a closed area, the circles
+    #         # should be traversed in opposite directions
+    #         xs[1, :] = xs[1, ::-1]
+    #         ys[1, :] = ys[1, ::-1]
+
+    #         # ax = plt.subplot(111, aspect='equal')
+    #         ax.fill(np.ravel(xs) + x_cen, np.ravel(ys) + y_cen, facecolor="gray",
+    #                 alpha=0.6, zorder=4)
+    #         ax.tick_params(axis="both", which="major", labelsize=15)
+    #         ax.add_patch(circ)
+    #         ax.add_patch(circ1)
+    #         ax.add_patch(circ2)
+    #         ax.set_xlabel("X Pixels", fontsize=15)
+    #         ax.set_ylabel("Y Pixels", fontsize=15)
+    #         ax.set_xlim((2.0, 75))
+    #         ax.set_ylim((2.0, 75))
+
+    #         fig.savefig(fig_cutouts_name)
+    #         print("Cutouts saved for {}".format(os.path.basename(fn)))
 
     def make_aperture(self, data, coordinates, radius, r_in, r_out,
                       method="exact", subpixels=10):
@@ -364,7 +581,7 @@ class TimeSeriesData:
 
     # @logged
     def do_photometry(self, star_id, data_directory, search_pattern,
-                      ra_star=None, dec_star=None):
+                      ra_star=None, dec_star=None, make_effective_psf=False):
         """Get all data from plate-solved images (right ascention,
            declination, airmass, dates, etc). Then, it converts the
            right ascention and declination into image positions to
@@ -399,6 +616,8 @@ class TimeSeriesData:
         # List of exposure times
         exptimes = list()
 
+        airmasses = list()
+
         # List of object positions
         x_pos = list()
         y_pos = list()
@@ -408,6 +627,10 @@ class TimeSeriesData:
 
         # List of good frames
         self.good_frames_list = list()
+
+        tables = list()
+        nddatas = list()
+        # projections_list = list()
 
         for fn in tqdm(fits_files[:60]):
             # Get data, header and WCS of fits files with any extension
@@ -425,21 +648,21 @@ class TimeSeriesData:
 
                 masked_data = self._mask_data(cutout)
 
-                y_cen, x_cen = self.find_centroid(center_yx, cutout, masked_data.mask,
+                x_cen, y_cen = self.find_centroid(center_yx, cutout, masked_data.mask,
                                                   method="2dgaussian")
 
                 # Exposure time
                 exptimes.append(self.exptime)
+                airmasses.append(self.airmass)
 
                 # Observation times
                 time = self.obs_time
 
                 # Sum of counts inside aperture
-                (counts_in_aperture,
-                 bkg_in_object) = self.make_aperture(data, (y_cen, x_cen),
-                                                     radius=self.r,
-                                                     r_in=self.r_in,
-                                                     r_out=self.r_out)
+                counts_in_aperture, bkg_in_object = self.make_aperture(data, (y_cen, x_cen),
+                                                                       radius=self.r,
+                                                                       r_in=self.r_in,
+                                                                       r_out=self.r_out)
 
                 object_counts.append(counts_in_aperture)
                 background_in_object.append(bkg_in_object)
@@ -447,11 +670,27 @@ class TimeSeriesData:
                 y_pos.append(center_yx[0])
                 times.append(time)
                 self.good_frames_list.append(fn)
+
+                if make_effective_psf:
+                    cutout = self._slice_data(data, center_yx, 2. * self.r_out)
+                    masked_data = self._mask_data(cutout)
+                    x_cen, y_cen = self._estimate_centroid_via_2dgaussian(cutout,
+                                                                          mask=masked_data.mask)
+                    positions = Table()
+                    positions["x"] = [x_cen]
+                    positions["y"] = [y_cen]
+
+                    tables.append(positions)
+                    nddatas.append(NDData(data=cutout))
             else:
                 continue
 
+        if make_effective_psf:
+            print(f"Building effective PSF for target star {self.star_id}")
+            self.make_effective_psf(nddatas, tables)
+
         return (object_counts, background_in_object,
-                exptimes, x_pos, y_pos, times)
+                exptimes, x_pos, y_pos, times, airmasses)
 
     # @logged
     def get_relative_flux(self, save_rms=False):
@@ -481,12 +720,16 @@ class TimeSeriesData:
          exptimes,
          x_pos_target,
          y_pos_target,
-         times) = self.do_photometry(self.star_id, self.data_directory, self.search_pattern,
-                                     ra_star=self.ra_target, dec_star=self.dec_target)
+         times,
+         airmasses) = self.do_photometry(self.star_id, self.data_directory, self.search_pattern,
+                                         ra_star=self.ra_target, dec_star=self.dec_target,
+                                         make_effective_psf=True)
 
         times = np.asarray(times)
 
-        print(f"Finished aperture photometry on target star. {self.__class__.__name__}"
+        airmasses = np.asarray(airmasses)
+
+        print(f"Finished aperture photometry on target star. {self.pipeline}"
               " will compute now the combined flux of the ensemble\n")
 
         # Positions of target star
@@ -516,7 +759,7 @@ class TimeSeriesData:
 
         # Sigma scintillation
         self.sigma_scint = compute_scintillation(0.143, self.telescope_altitude,
-                                                 self.airmass, exptimes)
+                                                 airmasses, exptimes)
 
         # Total photometric error for 1 mag in one observation
         self.sigma_total = np.sqrt(self.sigma_phot**2.0 + self.sigma_ron**2.0
@@ -550,11 +793,9 @@ class TimeSeriesData:
             self.logger.debug(f"Aperture photometry of {ref_star}\n")
             (refer_flux,
              background_in_ref_star,
-             exptimes_ref,
-             x_pos_ref,
-             y_pos_ref,
-             obs_dates) = self.do_photometry(ref_star, self.data_directory, self.search_pattern,
-                                             ra_ref_star, dec_ref_star)
+             _, _, _, _, _) = self.do_photometry(ref_star, self.data_directory, self.search_pattern,
+                                                 ra_ref_star, dec_ref_star,
+                                                 make_effective_psf=False)
             reference_star_flux_sec.append(np.asarray(refer_flux) / exptimes)
             background_in_ref_star_sec.append(np.asarray(background_in_ref_star) / exptimes)
             print(f"Finished aperture photometry on ref_star {ref_star}\n")

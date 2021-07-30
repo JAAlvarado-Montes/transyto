@@ -193,7 +193,7 @@ def calibrate_data(search_raw_files, darks_directory="", flats_directory="", bia
     with tempfile.TemporaryDirectory() as tmp_directory:
 
         # Create and charge masterdark
-        darks_list = search_files_across_directories(darks_directory, "*Dark*")
+        darks_list = search_files_across_directories(darks_directory, "*.fits*")
         masterdark = create_master_image_stack(darks_list, "masterdark.fits",
                                                output_directory=tmp_directory)
         masterdark = safe_load_ccdproc(masterdark, 'adu')
@@ -223,7 +223,7 @@ def calibrate_data(search_raw_files, darks_directory="", flats_directory="", bia
                                        scale=True)
 
         # List of science exposures to clean
-        files_list = search_files_across_directories(search_raw_files, "*fit*")
+        files_list = search_files_across_directories(search_raw_files, "*fits*")
 
         # Output directory for files after reduction
         output_directory = search_raw_files + "cleaned"

@@ -11,14 +11,21 @@ import subprocess
 def plate_solve_frame(files_list, timeout=1200, solve_opts=None,
                       replace=True, remove_extras=True,
                       skip_solved=True, verbose=True, **kwargs):
-    """ Plate solves an image.
+    """Plate solves an image.
 
     Args:
-        fname(str, required):       Filename to solve in .fits extension.
-        timeout(int, optional):     Timeout for the solve-field command,
-                                    defaults to 60 seconds.
-        solve_opts(list, optional): List of options for solve-field.
-        verbose(bool, optional):    Show output, defaults to False.
+        files_list(str, required): Filename to solve in .fits extension.
+        timeout(int, optional): Timeout for the solve-field command. Default 1200 seconds.
+        verbose(bool, optional): Show output, defaults to False. Default True.
+        solve_opts(list, optional): List of options for solve-field. Default True.
+        replace (bool, optional): Replace the unsolved file by the solved one. Default True.
+        remove_extras (bool, optional): Remoce extra files produced by solve-field. Default True.
+        skip_solved (bool, optional): If file is solved then skip it. Defaul True.
+        verbose (bool, optional): Show process by solve-field. Defaul True.
+        **kwargs: Description
+    Returns:
+        list: All the pathnames of solved files.
+
     """
 
     files_list = search_files_across_directories(files_list, "*.fit*")
