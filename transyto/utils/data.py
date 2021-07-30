@@ -41,7 +41,7 @@ def safe_load_ccdproc(fname, data_type):
     return data
 
 
-def create_master_image_stack(filenames_path,
+def create_master_image_stack(filenames_list,
                               output_filename,
                               min_number_files_in_directory=3,
                               output_directory="./",
@@ -54,7 +54,7 @@ def create_master_image_stack(filenames_path,
 
     Args:
     ----------
-    filenames_path : string
+    filenames_list : list,
         Absolute path to location of files. OK if no data or not enough
         data is in the directory
     output_filename : string,
@@ -77,19 +77,16 @@ def create_master_image_stack(filenames_path,
     """
 
     # Check minimum amount of files to combine
-    if len(filenames_path) < min_number_files_in_directory:
+    if len(filenames_list) < min_number_files_in_directory:
         print('EXIT: Not enough files in list for combining (returns None)')
         return None
 
     # # Print files in list to combine
-    print('About to combine {} files'.format(len(filenames_path)))
+    print('About to combine {} files'.format(len(filenames_list)))
 
     # Make the output directory for master file
-    if output_directory == "./":
-        path = os.path.join(filenames_path, "master")
-        os.makedirs(path, exist_ok=True)
-    else:
-        os.makedirs(output_directory, exist_ok=True)
+
+    os.makedirs(output_directory, exist_ok=True)
 
     # Get the ouput file name and path for master
     output_filename = os.path.join(output_directory, output_filename)
@@ -99,7 +96,7 @@ def create_master_image_stack(filenames_path,
         os.remove(output_filename)
 
     # Combine the file list to get the master data using any method
-    combine(filenames_path, output_filename, method=method, scale=scale,
+    combine(filenames_list, output_filename, method=method, scale=scale,
             combine_uncertainty_function=np.ma.std, unit="adu")
 
     # Print path of the master created
