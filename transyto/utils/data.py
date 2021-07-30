@@ -27,8 +27,7 @@ def safe_load_ccdproc(fname, data_type):
 
     Returns
     -------
-
-    data : ccdproc.CCDData
+    data: ccdproc.CCDData
         Instance of ccdproc.CCDData with correct units specified.
     """
     try:
@@ -52,7 +51,7 @@ def create_master_image_stack(filenames_list,
 
     Search for files into list to create a master file.
 
-    Args:
+    Parameters
     ----------
     filenames_list : list,
         Absolute path to location of files. OK if no data or not enough
@@ -118,8 +117,7 @@ def get_data(fname, *args, **kwargs):
 
     Returns
     -------
-
-    data : data array
+        data : data array
     """
 
     return fits.getdata(fname, *args, header=False, **kwargs)
@@ -133,12 +131,15 @@ def get_header(fn, *args, **kwargs):
     image. If you need the compression header information use the astropy
     module directly.
 
-    Args:
-        fn (str): Path to FITS file.
-        *args: Passed to `astropy.io.fits.getheader`.
-        **kwargs: Passed to `astropy.io.fits.getheader`.
+    Parameters
+    ----------
+    fn: string
+        Path to FITS file.
+    *args: Passed to `astropy.io.fits.getheader`.
+    **kwargs: Passed to `astropy.io.fits.getheader`.
 
-    Returns:
+    Returns
+    -------
         `astropy.io.fits.header.Header`: The FITS header for the data.
     """
     ext = 0
@@ -155,10 +156,13 @@ def get_value(fn, *args, **kwargs):
     associated with the image (not the compression header). If you need
     the compression header information use the astropy module directly.
 
-    Args:
-        fn (str): Path to FITS file.
+    Parameters
+    ----------
+    fn: string
+        Path to FITS file.
 
-    Returns:
+    Returns
+    -------
         str or float: Value from header (with no type conversion).
     """
     ext = 0
@@ -167,7 +171,7 @@ def get_value(fn, *args, **kwargs):
     return fits.getval(fn, *args, ext=ext, **kwargs)
 
 
-def calibrate_data(filenames_path, darks_directory="", flats_directory="", bias_directory="",
+def calibrate_data(filenames_path, bias_directory="", darks_directory="", flats_directory="",
                    flat_correction=True, verbose=True):
     """
     Does reduction of astronomical data by subtraction of dark noise
@@ -175,14 +179,14 @@ def calibrate_data(filenames_path, darks_directory="", flats_directory="", bias_
 
     Parameters
     ----------
-    filenames_path : string
+    filenames_path : str
         Top level path of .fits files to search for stars
-    darks_directory : string
+    bias_directory : str, optional
+        Top level path of bias frames
+    darks_directory : str, optional
         Top level path of dark frames
     flats_directory : str, optional
         Top level path of flat frames
-    bias_directory : str, optional
-        Top level path of bias frames
     flat_correction : bool, optional
         Flag to perform flat/gain correction
     verbose : bool, optional
@@ -194,20 +198,20 @@ def calibrate_data(filenames_path, darks_directory="", flats_directory="", bias_
     with tempfile.TemporaryDirectory() as tmp_directory:
 
         # Create and charge masterdark
-        darks_list = search_files_across_directories(darks_directory, "*.fits*")
+        darks_list = search_files_across_directories(darks_directory, "*.fit*")
         masterdark = create_master_image_stack(darks_list, "masterdark.fits",
                                                output_directory=tmp_directory)
         masterdark = safe_load_ccdproc(masterdark, 'adu')
 
         if flat_correction:
             # Create and charge masterbias
-            bias_list = search_files_across_directories(bias_directory, "*Bias*")
+            bias_list = search_files_across_directories(bias_directory, "*.fit*")
             masterbias = create_master_image_stack(bias_list, "masterdark.fits",
                                                    output_directory=tmp_directory)
             masterbias = safe_load_ccdproc(masterbias, 'adu')
 
             # Create and charge masterflat
-            flats_list = search_files_across_directories(flats_directory, "*Flat*")
+            flats_list = search_files_across_directories(flats_directory, "*.fit*")
             masterflat = create_master_image_stack(flats_list, "masterflat.fits",
                                                    output_directory=tmp_directory)
             masterflat = safe_load_ccdproc(masterflat, 'adu')
