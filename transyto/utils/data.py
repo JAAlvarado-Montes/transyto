@@ -41,7 +41,7 @@ def safe_load_ccdproc(fname, data_type):
     return data
 
 
-def create_master_image_stack(list_of_filenames,
+def create_master_image_stack(filenames_path,
                               output_filename,
                               min_number_files_in_directory=3,
                               output_directory="./",
@@ -54,7 +54,7 @@ def create_master_image_stack(list_of_filenames,
 
     Args:
     ----------
-    list_of_filenames : string
+    filenames_path : string
         Absolute path to location of files. OK if no data or not enough
         data is in the directory
     output_filename : string,
@@ -77,15 +77,19 @@ def create_master_image_stack(list_of_filenames,
     """
 
     # Check minimum amount of files to combine
-    if len(list_of_filenames) < min_number_files_in_directory:
+    if len(filenames_path) < min_number_files_in_directory:
         print('EXIT: Not enough files in list for combining (returns None)')
         return None
 
     # # Print files in list to combine
-    print('About to combine {} files'.format(len(list_of_filenames)))
+    print('About to combine {} files'.format(len(filenames_path)))
 
     # Make the output directory for master file
-    os.makedirs(output_directory, exist_ok=True)
+    if output_directory == "./":
+        path = os.path.join(filenames_path, "master")
+        os.makedirs(path, exist_ok=True)
+    else:
+        os.makedirs(output_directory, exist_ok=True)
 
     # Get the ouput file name and path for master
     output_filename = os.path.join(output_directory, output_filename)
@@ -95,7 +99,7 @@ def create_master_image_stack(list_of_filenames,
         os.remove(output_filename)
 
     # Combine the file list to get the master data using any method
-    combine(list_of_filenames, output_filename, method=method, scale=scale,
+    combine(filenames_path, output_filename, method=method, scale=scale,
             combine_uncertainty_function=np.ma.std, unit="adu")
 
     # Print path of the master created
@@ -166,7 +170,7 @@ def get_value(fn, *args, **kwargs):
     return fits.getval(fn, *args, ext=ext, **kwargs)
 
 
-def calibrate_data(search_raw_files, darks_directory="", flats_directory="", bias_directory="",
+def calibrate_data(filenames_path, darks_directory="", flats_directory="", bias_directory="",
                    flat_correction=True, verbose=True):
     """
     Does reduction of astronomical data by subtraction of dark noise
@@ -174,7 +178,7 @@ def calibrate_data(search_raw_files, darks_directory="", flats_directory="", bia
 
     Parameters
     ----------
-    search_raw_files : string
+    filenames_path : string
         Top level path of .fits files to search for stars
     darks_directory : string
         Top level path of dark frames
@@ -223,10 +227,10 @@ def calibrate_data(search_raw_files, darks_directory="", flats_directory="", bia
                                        scale=True)
 
         # List of science exposures to clean
-        files_list = search_files_across_directories(search_raw_files, "*fits*")
+        files_list = search_files_across_directories(filenames_path, "*fits*")
 
         # Output directory for files after reduction
-        output_directory = search_raw_files + "cleaned"
+        output_directory = filenames_path + "cleaned"
         os.makedirs(output_directory, exist_ok=True)
 
         # Reduce each science frame in files_list
