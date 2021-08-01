@@ -132,7 +132,8 @@ class TimeSeriesData:
         # Logger to track activity of the class
         self.logger = logging.getLogger(f"{self.pipeline} logger")
         self.logger.addHandler(logging.FileHandler(filename=os.path.join(logs_dir,
-                                                                         'photometry.log'), mode='w'))
+                                                                         'photometry.log'),
+                                                   mode='w'))
         self.logger.setLevel(logging.DEBUG)
 
         self.logger.info(pyfiglet.figlet_format(f"-*- {self.pipeline} -*-"))
@@ -1071,7 +1072,8 @@ class LightCurve(TimeSeriesData):
         fig, ax = plt.subplots(2, 1,
                                sharey="row", sharex="col", figsize=(8.5, 6.3))
         fig.suptitle(f"Differential Photometry\nTarget Star {self.star_id}, "
-                     f"Aperture radius = {self.r} pixels, focus: {self.header['FOC-POS']} eu", fontsize=13)
+                     f"Aperture radius = {self.r} pixels, focus: {self.header['FOC-POS']} eu",
+                     fontsize=13)
 
         ax[1].plot(time_bjd, normalized_flux, "k.", ms=3,
                    label=f"NBin = {self.exptime:.1f} s, std = {std:.2%}")
@@ -1149,7 +1151,8 @@ class LightCurve(TimeSeriesData):
 
             fig, ax = plt.subplots(1, 1, figsize=(8.5, 5.0))
             ax.plot(results.model_folded_phase, results.model_folded_model, color='red')
-            ax.scatter(results.folded_phase, results.folded_y, color='blue', s=10, alpha=0.5, zorder=2)
+            ax.scatter(results.folded_phase, results.folded_y, color='blue', s=10,
+                       alpha=0.5, zorder=2)
             ax.set_xlim(0.48, 0.52)
             ax.set_xlabel('Phase')
             ax.set_ylabel('Relative flux')
