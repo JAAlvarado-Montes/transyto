@@ -1,5 +1,4 @@
-from transyto.utils import search_files_across_directories
-from transyto.utils.data import get_header
+from transyto.utils import search_files_across_directories, get_header
 from astropy.wcs import WCS
 
 from warnings import warn
@@ -8,32 +7,42 @@ import os
 import subprocess
 
 
-def plate_solve_frame(files_list, timeout=1200, solve_opts=None,
+def plate_solve_frame(filenames_path, timeout=100, solve_opts=None,
                       replace=True, remove_extras=True,
                       skip_solved=True, verbose=True, **kwargs):
     """Plate solves an image.
 
-    Args:
-        files_list(str, required): Filename to solve in .fits extension.
-        timeout(int, optional): Timeout for the solve-field command. Default 1200 seconds.
-        verbose(bool, optional): Show output, defaults to False. Default True.
-        solve_opts(list, optional): List of options for solve-field. Default True.
-        replace (bool, optional): Replace the unsolved file by the solved one. Default True.
-        remove_extras (bool, optional): Remoce extra files produced by solve-field. Default True.
-        skip_solved (bool, optional): If file is solved then skip it. Defaul True.
-        verbose (bool, optional): Show process by solve-field. Defaul True.
-        **kwargs: Description
-    Returns:
-        list: All the pathnames of solved files.
+    Parameters
+    ----------
+    fits_file: string or list
+        Filename to solve in .fits extension.
+    timeout: int, optional
+        Timeout for the solve-field command. Default 1200 seconds.
+    verbose: boolean, optional
+        Show output, defaults to False. Default True.
+    solve_opts: list, optional
+        List of options for solve-field. Default True.
+    replace: boolean, optional
+        Replace the unsolved file by the solved one. Default True.
+    remove_extras: boolean, optional
+        Remoce extra files produced by solve-field. Default True.
+    skip_solved: boolean, optional
+        If file is solved then skip it. Defaul True.
+    verbose: boolean, optional
+        Show process by solve-field. Defaul True.
+    **kwargs: Description
+
+    Returns
+    -------
+    list: All the pathnames of solved files.
 
     """
-
-    files_list = search_files_across_directories(files_list, "*.fit*")
+    files_list = search_files_across_directories(filenames_path, "*.fit*")
 
     for fname in files_list:
 
-        verbose = kwargs.get('verbose', False)
-        skip_solved = kwargs.get('skip_solved', True)
+        verbose = kwargs.get('verbose', verbose)
+        skip_solved = kwargs.get('skip_solved', skip_solved)
 
         out_dict = {}
 
@@ -44,7 +53,7 @@ def plate_solve_frame(files_list, timeout=1200, solve_opts=None,
 
         # Check for solved file
         if skip_solved and wcs.is_celestial:
-
+            print(verbose)
             if verbose:
                 print("Solved file exists, skipping",
                       "(pass skip_solved=False to solve again):",
@@ -52,10 +61,10 @@ def plate_solve_frame(files_list, timeout=1200, solve_opts=None,
 
             out_dict.update(header)
             out_dict['solved_fits_file'] = fname
-            return out_dict
+            continue
 
         if verbose:
-            print("Entering solve_field")
+            print("Entering solve_field...")
 
         # solve_field_script = os.path.join(os.getenv(''), 'scripts', 'solve_field.sh')
         solve_field_script = "solve-field"
@@ -110,15 +119,17 @@ def plate_solve_frame(files_list, timeout=1200, solve_opts=None,
         try:
             subprocess.run(cmd, universal_newlines=True,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
         except OSError as e:
             raise "Can't send command to solve_field.sh: {} \t {}".format(e, cmd)
         except ValueError as e:
             raise "Bad parameters to solve_field: {} \t {}".format(e, cmd)
         except Exception as e:
             raise "Timeout on plate solving: {}".format(e)
+            continue
 
         if verbose:
-            print("Returning proc from solve_field")
+            print(f"Returning proc from solve_field. WCS built for {fname}\n")
 
         try:
             # Handle extra files created by astrometry.net

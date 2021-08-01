@@ -11,3 +11,4 @@ pandas
 uncertainties
 transitleastsquares
 ccdproc
+barycorrpy

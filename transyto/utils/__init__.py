@@ -10,6 +10,8 @@ import functools
 from natsort import natsorted
 from warnings import warn
 
+from astropy.io import fits
+
 log = logging.getLogger(__name__)
 
 __all__ = ['search_files_across_directories', 'logged', 'fpack', 'funpack']
@@ -97,6 +99,73 @@ def funpack(*args, **kwargs):
         str: Path to uncompressed FITS file.
     """
     return fpack(*args, unpack=True, **kwargs)
+
+
+def get_data(fname, *args, **kwargs):
+    """Open fits file ensuring it has the right units for ccdproc.
+
+    Make sure the units in BUNIT is what it should be. If BUNIT not in fits,
+    then set to data_type input.
+
+    Parameters
+    ----------
+    fname : string
+        Fits file name to load.
+
+    Returns
+    -------
+        data : data array
+    """
+
+    return fits.getdata(fname, *args, header=False, **kwargs)
+
+
+def get_header(fn, *args, **kwargs):
+    """Get the FITS header.
+
+    Small wrapper around `astropy.io.fits.getheader` to auto-determine
+    the FITS extension. This will return the header associated with the
+    image. If you need the compression header information use the astropy
+    module directly.
+
+    Parameters
+    ----------
+    fn: string
+        Path to FITS file.
+    *args: Passed to `astropy.io.fits.getheader`.
+    **kwargs: Passed to `astropy.io.fits.getheader`.
+
+    Returns
+    -------
+        `astropy.io.fits.header.Header`: The FITS header for the data.
+    """
+    ext = 0
+    if fn.endswith('.fz'):
+        ext = 1
+    return fits.getheader(fn, *args, ext=ext, **kwargs)
+
+
+def get_value(fn, *args, **kwargs):
+    """Get a value from the FITS header.
+
+    Small wrapper around `astropy.io.fits.getval` to auto-determine
+    the FITS extension. This will return the value from the header
+    associated with the image (not the compression header). If you need
+    the compression header information use the astropy module directly.
+
+    Parameters
+    ----------
+    fn: string
+        Path to FITS file.
+
+    Returns
+    -------
+        str or float: Value from header (with no type conversion).
+    """
+    ext = 0
+    if fn.endswith('.fz'):
+        ext = 1
+    return fits.getval(fn, *args, ext=ext, **kwargs)
 
 
 def logged(func):
