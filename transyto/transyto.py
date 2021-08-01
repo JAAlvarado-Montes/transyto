@@ -928,13 +928,12 @@ class LightCurve(TimeSeriesData):
         detrended and trended flux : numpy array
         """
 
-        trend = scipy.signal.medfilt(flux, 15)
+        trend = scipy.signal.medfilt(flux, 21)
         detrended_flux = flux / trend
 
         if Porb is not None:
-            self.logger.info("Now detrending the time series using queried "
-                             + f"M_s = {M_star} M_sun, R_s = {R_star} R_sun, and "
-                             + f"P_orb = {Porb} d found from previous model\n")
+            print(f"Now detrending the time series using queried M_s = {M_star} M_sun, "
+                  + f"R_s = {R_star} R_sun, and P_orb = {Porb} d found from previous model\n")
 
             # Compute the transit duration
             transit_dur = t14(R_s=R_star, M_s=M_star,
@@ -1001,7 +1000,7 @@ class LightCurve(TimeSeriesData):
 
     # @logged
     def plot(self, time, flux, flux_error, sigma=3, bins=30, detrend=False, plot_tracking=False,
-             plot_noise_sources=False, model_transit=False, Porb=None):
+             plot_noise_sources=False, model_transit=False):
         """Plot a light curve using the flux time series
 
         Parameters
@@ -1023,8 +1022,6 @@ class LightCurve(TimeSeriesData):
             the observation frames.
         plot_noise_name : bool, optional
             Flag to plot the noise sources throughout the night.
-        Porb : float, optional
-            Orbital period of the planet (in days).
 
         No Longer Returned
         ------------------
@@ -1034,8 +1031,6 @@ class LightCurve(TimeSeriesData):
         lightcurves_directory = self.data_directory + self.output_dir_name
 
         pd.plotting.register_matplotlib_converters()
-
-        star_data = catalog.StarData(self.star_id).query_from_mast()
 
         normalized_flux = flux / np.nanmedian(flux)
 
@@ -1051,9 +1046,6 @@ class LightCurve(TimeSeriesData):
         # Barycentric Julian Date (BJD) - 2450000.0
         time_bjd = bjdtdb_times[0] - time_norm_factor
 
-        if detrend:
-            normalized_flux = self.detrend_data(time_bjd, flux)  # , R_star=star_data["Rs"], M_star=star_data["Ms"], Porb=Porb)
-
         # Remove invalid values such as nan, inf, non, negative
         # time, flux = cleaned_array(time, flux)
 
@@ -1062,10 +1054,60 @@ class LightCurve(TimeSeriesData):
         time_bjd = time_bjd[~clip_mask]
         flux_error = flux_error[~clip_mask]
 
+        if model_transit or (detrend and model_transit):
+            # flatten_flux = self.detrend_data(time_bjd, flux[~clip_mask])
+            results = self.model_lightcurve(time_bjd, normalized_flux)
+
+            # Name for folded light curve.
+            model_lightcurve_name = os.path.join(lightcurves_directory, "Model_lightcurve_camera_"
+                                                 f"{self.instrument}_r{self.r}.png")
+
+            loc = plticker.MultipleLocator(base=5)  # this locator puts ticks at regular intervals
+
+            fig, ax = plt.subplots(1, 1, figsize=(8.5, 5.0))
+            ax.plot(results.model_folded_phase, results.model_folded_model, color='red')
+            ax.scatter(results.folded_phase, results.folded_y, color='blue', s=10,
+                       alpha=0.5, zorder=2)
+            ax.set_xlim(0.48, 0.52)
+            ax.set_xlabel('Phase')
+            ax.set_ylabel('Relative flux')
+            ax.xaxis.set_major_locator(loc)
+            ax.xaxis.set_major_formatter(plticker.FormatStrFormatter('%.1f'))
+
+            fig.savefig(model_lightcurve_name)
+
+            print(f"Folded model of the light curve of {self.star_id} was plotted\n")
+
+            # Name for periodogram.
+            periodogram_name = os.path.join(lightcurves_directory, "Periodogram_camera_"
+                                            f"{self.instrument}_r{self.r}.png")
+
+            fig, ax = plt.subplots(1, 1, figsize=(8.5, 5.0))
+            ax.axvline(results.period, alpha=0.4, lw=3)
+            ax.set_xlim(np.min(results.periods), np.max(results.periods))
+            for n in range(2, 10):
+                ax.axvline(n * results.period, alpha=0.4, lw=1, linestyle="dashed")
+                ax.axvline(results.period / n, alpha=0.4, lw=1, linestyle="dashed")
+            ax.set_ylabel(r'SDE')
+            ax.set_xlabel('Period [d]')
+            ax.plot(results.periods, results.power, color='black', lw=0.5)
+            ax.set_xlim(0, max(results.periods))
+
+            fig.savefig(periodogram_name, dpi=300)
+
+            # Detrend data using the previous transit model.
+            # star_data = catalog.StarData(self.star_id).query_from_mast()
+            # normalized_flux = self.detrend_data(time_bjd, normalized_flux, R_star=star_data["Rs"],
+            #                                     M_star=star_data["Ms"], Porb=results.period)
+
+        # Detrend data without using transit model.
+        if detrend and not model_transit:
+            normalized_flux = self.detrend_data(time_bjd, flux[~clip_mask])
+
         # Standard deviation in ppm for the observation
         std = np.nanstd(normalized_flux)
 
-        # Light curve name
+        # Name for light curve.
         lightcurve_name = os.path.join(lightcurves_directory, "Lightcurve_camera_"
                                        f"{self.instrument}_r{self.r}.png")
 
@@ -1114,6 +1156,7 @@ class LightCurve(TimeSeriesData):
         ax[1].text(0.97, 0.9, "b)", fontsize=11, transform=ax[1].transAxes)
         ax[0].text(0.97, 0.9, "a)", fontsize=11, transform=ax[0].transAxes)
 
+        # Plot the ingress, mid-transit, and egress times.
         if self.transit_times:
             jdutc_transit_times = Time(self.transit_times, format='isot', scale='utc')
             bjdtdb_transit_times = utc_tdb.JDUTC_to_BJDTDB(jdutc_transit_times, hip_id=8102,
@@ -1136,34 +1179,12 @@ class LightCurve(TimeSeriesData):
         plt.xticks(rotation=30, size=8.0)
 
         fig.subplots_adjust(hspace=0.2)
-        fig.savefig(lightcurve_name)
+        fig.savefig(lightcurve_name, dpi=300)
 
         print(f"The light curve of {self.star_id} was plotted")
 
-        if model_transit:
-            results = self.model_lightcurve(time_bjd, normalized_flux)
-
-            # Folded light curve name
-            model_lightcurve_name = os.path.join(lightcurves_directory, "model_lightcurve_camera_"
-                                                 f"{self.instrument}_r{self.r}.png")
-
-            loc = plticker.MultipleLocator(base=5)  # this locator puts ticks at regular intervals
-
-            fig, ax = plt.subplots(1, 1, figsize=(8.5, 5.0))
-            ax.plot(results.model_folded_phase, results.model_folded_model, color='red')
-            ax.scatter(results.folded_phase, results.folded_y, color='blue', s=10,
-                       alpha=0.5, zorder=2)
-            ax.set_xlim(0.48, 0.52)
-            ax.set_xlabel('Phase')
-            ax.set_ylabel('Relative flux')
-            ax.xaxis.set_major_locator(loc)
-            ax.xaxis.set_major_formatter(plticker.FormatStrFormatter('%.1f'))
-
-            fig.savefig(model_lightcurve_name)
-
-            print(f"Folded model of the light curve of {self.star_id} was plotted\n")
-
         if plot_tracking:
+            # Name for plot of tracking.
             plot_tracking_name = os.path.join(lightcurves_directory, "tracking_plot_"
                                               f"{self.instrument}_r{self.r}.png")
 
@@ -1180,9 +1201,10 @@ class LightCurve(TimeSeriesData):
             ax.set_xlabel(f"Time [BJD-{time_norm_factor}]", fontsize=13)
             plt.xticks(rotation=30, size=8.0)
             plt.grid(alpha=0.4)
-            fig.savefig(plot_tracking_name)
+            fig.savefig(plot_tracking_name, dpi=300)
 
         if plot_noise_sources:
+            # Name for plot of noise sources.
             plot_noise_name = os.path.join(lightcurves_directory, "noises_plot_"
                                            f"{self.instrument}_r{self.r}.png")
 
@@ -1208,4 +1230,4 @@ class LightCurve(TimeSeriesData):
             # ax.set_ylim((0.11, 0.48))
             ax.xaxis.set_major_formatter(dates.DateFormatter("%H:%M:%S"))
             plt.grid(alpha=0.4)
-            fig.savefig(plot_noise_name)
+            fig.savefig(plot_noise_name, dpi=300)
