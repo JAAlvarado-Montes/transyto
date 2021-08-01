@@ -1141,7 +1141,7 @@ class LightCurve(TimeSeriesData):
         print(f"The light curve of {self.star_id} was plotted")
 
         if model_transit:
-            results = self.model_lightcurve(time_bjd)
+            results = self.model_lightcurve(time_bjd, normalized_flux)
 
             # Folded light curve name
             model_lightcurve_name = os.path.join(lightcurves_directory, "model_lightcurve_camera_"
