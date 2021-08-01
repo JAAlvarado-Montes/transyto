@@ -894,21 +894,17 @@ class LightCurve(TimeSeriesData):
                                          dec_ref_stars=dec_ref_stars,
                                          telescope=telescope)
 
-    def clip_outliers(self, time, flux, error, sigma_upper, return_mask=False, **kwargs):
+    def clip_outliers(self, unclipped_array, sigma_upper, **kwargs):
         """ Covenience wrapper for sigma_clip function from astropy.
         """
 
-        clipped_data = sigma_clip(data=flux, sigma_upper=sigma_upper, sigma_lower=float('inf'),
-                                  maxiters=10, cenfunc=np.median, masked=True, copy=True)
+        clipped_array = sigma_clip(data=unclipped_array, sigma_upper=sigma_upper,
+                                   sigma_lower=float('inf'), maxiters=10, cenfunc=np.median,
+                                   masked=True, copy=True)
 
-        mask = clipped_data.mask
-        normalized_flux_clipped = flux[~mask]
-        times_clipped = time[~mask]
-        errors_clipped = error[~mask]
+        mask = clipped_array.mask
 
-        if return_mask:
-            return times_clipped, normalized_flux_clipped, errors_clipped, mask
-        return times_clipped, normalized_flux_clipped, errors_clipped
+        return unclipped_array[~mask], mask
 
     def detrend_data(self, time, flux, R_star=None, M_star=None, Porb=None):
         """Detrend time-series data
@@ -1003,7 +999,7 @@ class LightCurve(TimeSeriesData):
         return results
 
     # @logged
-    def plot(self, time, flux, std_errors, sigma=3, bins=30, detrend=False, plot_tracking=False,
+    def plot(self, time, flux, flux_error, sigma=3, bins=30, detrend=False, plot_tracking=False,
              plot_noise_sources=False, model_transit=False, Porb=None):
         """Plot a light curve using the flux time series
 
@@ -1013,7 +1009,7 @@ class LightCurve(TimeSeriesData):
             List of times of observations
         flux : list or array,
             List of target flux
-        std_errors : TYPE
+        flux_error : list or array
             List of data errors
         sigma : float, optional
             Number of sigmas to clip outliers from time series data
@@ -1061,9 +1057,9 @@ class LightCurve(TimeSeriesData):
         # time, flux = cleaned_array(time, flux)
 
         # Clip values outside sigma_upper
-        (time_bjd, normalized_flux,
-            std_error, clip_mask) = self.clip_outliers(time_bjd, normalized_flux, std_errors,
-                                                       sigma_upper=sigma, return_mask=True)
+        normalized_flux, clip_mask = self.clip_outliers(normalized_flux, sigma_upper=sigma)
+        time_bjd = time_bjd[~clip_mask]
+        flux_error = flux_error[~clip_mask]
 
         # Standard deviation in ppm for the observation
         std = np.nanstd(normalized_flux)
@@ -1080,7 +1076,7 @@ class LightCurve(TimeSeriesData):
         ax[1].plot(time_bjd, normalized_flux, "k.", ms=3,
                    label=f"NBin = {self.exptime:.1f} s, std = {std:.2%}")
 
-        ax[1].errorbar(time_bjd, normalized_flux, yerr=std_error,
+        ax[1].errorbar(time_bjd, normalized_flux, yerr=flux_error,
                        fmt="none", ecolor="k", elinewidth=0.8,
                        label=r"$\sigma_{\mathrm{tot}}=\sqrt{\sigma_{\mathrm{phot}}^{2} "
                        r"+ \sigma_{\mathrm{sky}}^{2} + \sigma_{\mathrm{scint}}^{2} + "
@@ -1194,7 +1190,7 @@ class LightCurve(TimeSeriesData):
             ax.plot_date(jdutc_times.plot_date, self.sigma_scint * 100,
                          "g-", label=r"$\sigma_{\mathrm{scint}}$")
             ax.plot_date(jdutc_times.plot_date, self.sigma_phot * 100, color="firebrick",
-                         ls="-", label=r"$\sigma_{\mathrm{phot}}$")
+                         ls="-", marker=None, label=r"$\sigma_{\mathrm{phot}}$")
             ax.plot_date(jdutc_times.plot_date, self.sigma_sky * 100,
                          "b-", label=r"$\sigma_{\mathrm{sky}}$")
             ax.plot_date(jdutc_times.plot_date, self.sigma_ron * 100,
