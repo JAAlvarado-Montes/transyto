@@ -1116,6 +1116,24 @@ class LightCurve(TimeSeriesData):
         ax[1].text(0.97, 0.9, "b)", fontsize=11, transform=ax[1].transAxes)
         ax[0].text(0.97, 0.9, "a)", fontsize=11, transform=ax[0].transAxes)
 
+        if self.transit_times:
+            jdutc_transit_times = Time(self.transit_times, format='isot', scale='utc')
+            bjdtdb_transit_times = utc_tdb.JDUTC_to_BJDTDB(jdutc_transit_times, hip_id=8102,
+                                                           lat=self.telescope_latitude,
+                                                           longi=self.telescope_longitude,
+                                                           alt=self.telescope_altitude)
+
+            ingress = bjdtdb_transit_times[0][0] - time_norm_factor
+            mid_transit = bjdtdb_transit_times[0][1] - time_norm_factor
+            egress = bjdtdb_transit_times[0][2] - time_norm_factor
+
+            ax[1].axvline(ingress, c="k", ls="--", alpha=0.5)
+            ax[1].axvline(mid_transit, c="k", ls="--", alpha=0.5)
+            ax[1].axvline(egress, c="k", ls="--", alpha=0.5)
+
+        ax[1].xaxis.set_major_formatter(plticker.FormatStrFormatter('%.3f'))
+        ax[1].yaxis.set_major_formatter(plticker.FormatStrFormatter('%.3f'))
+
         plt.xlabel(f"Time [BJD-{time_norm_factor}]", fontsize=13)
         plt.xticks(rotation=30, size=8.0)
 
@@ -1176,7 +1194,7 @@ class LightCurve(TimeSeriesData):
             ax.plot_date(jdutc_times.plot_date, self.sigma_scint * 100,
                          "g-", label=r"$\sigma_{\mathrm{scint}}$")
             ax.plot_date(jdutc_times.plot_date, self.sigma_phot * 100, color="firebrick",
-                         marker=None, ls="-", label=r"$\sigma_{\mathrm{phot}}$")
+                         ls="-", label=r"$\sigma_{\mathrm{phot}}$")
             ax.plot_date(jdutc_times.plot_date, self.sigma_sky * 100,
                          "b-", label=r"$\sigma_{\mathrm{sky}}$")
             ax.plot_date(jdutc_times.plot_date, self.sigma_ron * 100,
@@ -1192,21 +1210,3 @@ class LightCurve(TimeSeriesData):
             ax.xaxis.set_major_formatter(dates.DateFormatter("%H:%M:%S"))
             plt.grid(alpha=0.4)
             fig.savefig(plot_noise_name)
-
-        if self.transit_times:
-            jdutc_transit_times = Time(self.transit_times, format='isot', scale='utc')
-            bjdtdb_transit_times = utc_tdb.JDUTC_to_BJDTDB(jdutc_transit_times, hip_id=8102,
-                                                           lat=self.telescope_latitude,
-                                                           longi=self.telescope_longitude,
-                                                           alt=self.telescope_altitude)
-
-            ingress = bjdtdb_transit_times[0][0] - time_norm_factor
-            mid_transit = bjdtdb_transit_times[0][1] - time_norm_factor
-            egress = bjdtdb_transit_times[0][2] - time_norm_factor
-
-            ax[1].axvline(ingress, c="k", ls="--", alpha=0.5)
-            ax[1].axvline(mid_transit, c="k", ls="--", alpha=0.5)
-            ax[1].axvline(egress, c="k", ls="--", alpha=0.5)
-
-        ax[1].xaxis.set_major_formatter(plticker.FormatStrFormatter('%.3f'))
-        ax[1].yaxis.set_major_formatter(plticker.FormatStrFormatter('%.3f'))
