@@ -12,3 +12,4 @@ uncertainties
 transitleastsquares
 ccdproc
 barycorrpy
+seaborn
