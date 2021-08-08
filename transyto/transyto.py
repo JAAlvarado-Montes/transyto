@@ -118,7 +118,7 @@ class TimeSeriesData:
         self.transit_times = transit_times
 
         # Centroid bow width for centroid function.
-        self._box_width = 2. * (self.r + 1)
+        self._box_width = self.r_out + 0.5
 
         pos_answers = ['True', 'true', 'yes', 'y', 'Yes', True]
         if from_coordinates in pos_answers:
@@ -276,11 +276,9 @@ class TimeSeriesData:
             warnings.simplefilter('ignore', category=UserWarning)
 
             if method == "2dgaussian":
-                x_cen, y_cen = self._estimate_centroid_via_2dgaussian(data,
-                                                                      mask)
+                x_cen, y_cen = self._estimate_centroid_via_2dgaussian(data, mask)
             elif method == "1dgaussian":
-                x_cen, y_cen = self._estimate_centroid_via_1dgaussian(data,
-                                                                      mask)
+                x_cen, y_cen = self._estimate_centroid_via_1dgaussian(data, mask)
 
             elif method == "moments":
                 x_cen, y_cen = self._estimate_centroid_via_moments(data, mask)
@@ -451,40 +449,42 @@ class TimeSeriesData:
         instrume = self.header["INSTRUME"]
         fig, ax = plt.subplots(figsize=(6.5, 6.5))
         ax.set_title(f"Huntsman Camera {instrume}\n"
-                     f"Target star {self.star_id}", fontsize=15)
+                     f"Star {star_id}", fontsize=15)
         norm = simple_norm(cutout, "sqrt", percent=99.7)
         ax.imshow(cutout, norm=norm, origin="lower", cmap="viridis")
         ax.scatter(x, y, c='k', marker='+', s=100)
 
         # Draw the apertures of object and background
         r = self.r
-        r_in = self.r_in
-        r_out = self.r_out
+        # r_in = self.r_in
+        # r_out = self.r_out
         circ = Circle((x, y), r, alpha=0.7, facecolor="none",
                       edgecolor="k", lw=2.0, zorder=3)
-        circ1 = Circle((x, y), r_in, alpha=0.7, facecolor="none",
-                       edgecolor="r", ls="--", lw=2.0, zorder=3)
-        circ2 = Circle((x, y), r_out, alpha=0.7, facecolor="none",
-                       edgecolor="r", ls="--", lw=2.0, zorder=3)
+        # circ1 = Circle((x, y), r_in, alpha=0.7, facecolor="none",
+        #                edgecolor="r", ls="--", lw=2.0, zorder=3)
+        # circ2 = Circle((x, y), r_out, alpha=0.7, facecolor="none",
+        #                edgecolor="r", ls="--", lw=2.0, zorder=3)
 
-        n, radii = 50, [r_in, r_out]
-        theta = np.linspace(0, 2 * np.pi, n, endpoint=True)
-        xs = np.outer(radii, np.cos(theta))
-        ys = np.outer(radii, np.sin(theta))
+        # n, radii = 50, [r_in, r_out]
+        # theta = np.linspace(0, 2 * np.pi, n, endpoint=True)
+        # xs = np.outer(radii, np.cos(theta))
+        # ys = np.outer(radii, np.sin(theta))
 
-        # in order to have a closed area, the circles
-        # should be traversed in opposite directions
-        xs[1, :] = xs[1, ::-1]
-        ys[1, :] = ys[1, ::-1]
+        # # in order to have a closed area, the circles
+        # # should be traversed in opposite directions
+        # xs[1, :] = xs[1, ::-1]
+        # ys[1, :] = ys[1, ::-1]
 
-        ax.fill(np.ravel(xs) + x, np.ravel(ys) + y, facecolor="gray",
-                alpha=0.6, zorder=4)
+        # ax.fill(np.ravel(xs) + x, np.ravel(ys) + y, facecolor="gray",
+        #         alpha=0.6, zorder=4)
         ax.tick_params(axis="both", which="major", labelsize=15)
         ax.add_patch(circ)
-        ax.add_patch(circ1)
-        ax.add_patch(circ2)
+        # ax.add_patch(circ1)
+        # ax.add_patch(circ2)
         ax.set_xlabel("X Pixels", fontsize=15)
         ax.set_ylabel("Y Pixels", fontsize=15)
+        ax.set_xlim((0, self._box_width - 1.0))
+        ax.set_ylim((0, self._box_width - 1.0))
 
         fig.savefig(fig_cutouts_name)
         plt.close(fig)
@@ -678,9 +678,8 @@ class TimeSeriesData:
                     nddatas.append(NDData(data=cutout_psf))
 
                 if save_cutout:
-                    cutout = self._slice_data(data, center_yx, 3.5 * self.r_out)
-                    masked_data = self._mask_data(cutout)
-                    x_cen, y_cen = self._estimate_centroid_via_2dgaussian(cutout, mask=masked_data.mask)
+                    x_cen, y_cen = self._estimate_centroid_via_2dgaussian(cutout,
+                                                                          mask=masked_data.mask)
                     self.save_star_cutout(star_id, x_cen, y_cen, cutout, fn)
 
             else:
