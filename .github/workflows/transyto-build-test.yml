@@ -6,7 +6,7 @@ name: transyto-build-test
 on:
   push:
     paths-ignore:
-      - tutorials/run_transyto.py
+    - "tutorials/**"
     branches: [ develop ]
   pull_request:
     branches: [ master ]
