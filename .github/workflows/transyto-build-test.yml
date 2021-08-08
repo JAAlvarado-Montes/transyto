@@ -6,11 +6,9 @@ name: transyto-build-test
 on:
   push:
     paths-ignore:
-      - 'tutorials/**'
+    - "tutorials/**"
     branches: [ develop ]
   pull_request:
-    paths-ignore:
-      - 'tutorials/**'
     branches: [ master ]
 
 jobs:
