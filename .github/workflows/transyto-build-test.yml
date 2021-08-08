@@ -4,13 +4,11 @@
 name: transyto-build-test
 
 on:
+  paths-ignore:
+    - 'tutorials/**'
   push:
-    paths-ignore:
-      - 'tutorials/**'
     branches: [ develop ]
   pull_request:
-    paths-ignore:
-      - 'tutorials/**'
     branches: [ master ]
 
 jobs:
