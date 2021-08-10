@@ -1038,7 +1038,7 @@ class LightCurve(TimeSeriesData):
         return results
 
     # @logged
-    def plot(self, time=[], flux=[], flux_error=[], bins=30, detrend=False, plot_tracking=False,
+    def plot(self, time, flux, flux_error, bins=30, detrend=False, plot_tracking=False,
              plot_noise_sources=False, model_transit=False):
         """Plot a light curve using the flux time series
 
