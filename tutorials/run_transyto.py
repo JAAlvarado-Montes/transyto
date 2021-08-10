@@ -44,7 +44,7 @@ if __name__ == "__main__":
     parser.add_argument("--telescope", dest="telescope",
                         help="Name of the telescope", type=str,
                         default=telescope)
-    parser.add_argument("--star-id", dest="star_id",
+    parser.add_argument("--target-star", dest="target_star",
                         help="Name of target star", type=str,
                         default=target_name)
     parser.add_argument("--transit-times", dest="transit_times",

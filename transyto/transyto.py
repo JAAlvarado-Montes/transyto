@@ -62,7 +62,7 @@ warnings.simplefilter('ignore', category=AstropyWarning)
 class TimeSeriesData:
     """Photometry Class"""
 
-    def __init__(self, star_id, data_directory, search_pattern, list_reference_stars,
+    def __init__(self, target_star, data_directory, search_pattern, list_reference_stars,
                  aperture_radius, from_coordinates=None, ra_target=None, dec_target=None,
                  transit_times=[], ra_ref_stars=[], dec_ref_stars=[], telescope=""):
         """Initialize class Photometry for a given target and reference stars.
@@ -97,7 +97,7 @@ class TimeSeriesData:
         """
 
         # Positional Arguments
-        self.star_id = star_id
+        self.target_star = target_star
         self.data_directory = data_directory
         self.search_pattern = search_pattern
         self.list_reference_stars = list_reference_stars
@@ -388,7 +388,7 @@ class TimeSeriesData:
 
             # Name of PSF profile image
             fig_slices_name = os.path.join(output_directory, "{}_{}_profile.png".
-                                           format(self.instrument, self.star_id))
+                                           format(self.instrument, self.target_star))
 
             projection_average = np.sum(projections_list, axis=0) / len(projections_list)
             psf_half = (np.max(projection_average) + np.min(projection_average)) / 2
@@ -401,7 +401,7 @@ class TimeSeriesData:
 
             fig = plt.figure(figsize=(6.5, 6.5))
             ax = fig.add_subplot(111)
-            plt.title(f"PSF profile of {self.star_id} " r"($m_\mathrm{V}=10.0$)", fontsize=15)
+            plt.title(f"PSF profile of {self.target_star} " r"($m_\mathrm{V}=10.0$)", fontsize=15)
             ax.plot(pixs, projection_average, "k-", ms=3)
             # ax.axhline(y=psf_half, xmin=0.36, xmax=0.67, c="r", ls="--", lw=1.5)
             ax.axvline(x=idx_n, c="b", ls="-.", lw=1.5)
@@ -687,7 +687,7 @@ class TimeSeriesData:
                 continue
 
         if make_effective_psf:
-            print(f"Building effective PSF for target star {self.star_id}")
+            print(f"Building effective PSF for target star {self.target_star}")
             self.make_effective_psf(nddatas, tables)
 
         return (object_counts, background_in_object,
@@ -710,9 +710,9 @@ class TimeSeriesData:
         """
         start = time.time()
 
-        print(f"Starting aperture photometry for {self.star_id}\n")
+        print(f"Starting aperture photometry for {self.target_star}\n")
 
-        self.logger.debug(f"-------------- Aperture photometry of {self.star_id} ---------------\n")
+        self.logger.debug(f"-------------- Aperture photometry of {self.target_star} ---------------\n")
         # Get flux of target star
         (target_flux,
          background_in_object,
@@ -720,7 +720,7 @@ class TimeSeriesData:
          x_pos_target,
          y_pos_target,
          times,
-         airmasses) = self.do_photometry(self.star_id, self.data_directory, self.search_pattern,
+         airmasses) = self.do_photometry(self.target_star, self.data_directory, self.search_pattern,
                                          ra_star=self.ra_target, dec_star=self.dec_target,
                                          make_effective_psf=False, save_cutout=True)
 
@@ -842,7 +842,7 @@ class TimeSeriesData:
         exec_time = end - start
 
         # Print when all of the analysis ends
-        print(f"Differential photometry of {self.star_id} has been finished, "
+        print(f"Differential photometry of {self.target_star} has been finished, "
               f"with {len(self.good_frames_list)} frames "
               f"of camera {self.instrument} (run time: {exec_time:.3f} sec)\n")
 
@@ -869,11 +869,11 @@ class TimeSeriesData:
 
 
 class LightCurve(TimeSeriesData):
-    def __init__(self, star_id, data_directory, search_pattern, list_reference_stars,
+    def __init__(self, target_star, data_directory, search_pattern, list_reference_stars,
                  aperture_radius, from_coordinates=True, ra_target=None, dec_target=None,
                  transit_times=[], ra_ref_stars=None, dec_ref_stars=None, telescope="",
                  save_target_cutouts=""):
-        super(LightCurve, self).__init__(star_id=star_id, data_directory=data_directory,
+        super(LightCurve, self).__init__(target_star=target_star, data_directory=data_directory,
                                          search_pattern=search_pattern,
                                          list_reference_stars=list_reference_stars,
                                          aperture_radius=aperture_radius,
@@ -1038,7 +1038,7 @@ class LightCurve(TimeSeriesData):
         return results
 
     # @logged
-    def plot(self, time, flux, flux_error, bins=30, detrend=False, plot_tracking=False,
+    def plot(self, time=[], flux=[], flux_error=[], bins=30, detrend=False, plot_tracking=False,
              plot_noise_sources=False, model_transit=False):
         """Plot a light curve using the flux time series
 
@@ -1207,7 +1207,7 @@ class LightCurve(TimeSeriesData):
 
             fig.savefig(model_lightcurve_name)
 
-            print(f"Folded model of the light curve of {self.star_id} was plotted\n")
+            print(f"Folded model of the light curve of {self.target_star} was plotted\n")
 
             # Name for periodogram.
             periodogram_name = os.path.join(lightcurves_directory, "Periodogram_cam"
@@ -1228,7 +1228,7 @@ class LightCurve(TimeSeriesData):
             fig.savefig(periodogram_name, dpi=300)
 
             # Detrend data using the previous transit model.
-            star_data = catalog.StarData(self.star_id).query_from_mast()
+            star_data = catalog.StarData(self.target_star).query_from_mast()
             # normalized_flux = self.detrend_data(time_bjd, normalized_flux, R_star=star_data["Rs"],
             #                                     M_star=star_data["Ms"], Porb=results.period)
 
@@ -1246,7 +1246,7 @@ class LightCurve(TimeSeriesData):
 
         fig, ax = plt.subplots(2, 1,
                                sharey="row", sharex="col", figsize=(8.5, 6.3))
-        fig.suptitle(f"Differential Photometry\nTarget Star {self.star_id}, "
+        fig.suptitle(f"Differential Photometry\nTarget Star {self.target_star}, "
                      f"Aperture = {self.r} pix, Focus: {self.header['FOC-POS']} eu",
                      fontsize=13)
 
@@ -1304,7 +1304,7 @@ class LightCurve(TimeSeriesData):
         fig.subplots_adjust(hspace=0.2)
         fig.savefig(lightcurve_name, dpi=300)
 
-        print(f"The light curve of {self.star_id} was plotted")
+        print(f"The light curve of {self.target_star} was plotted")
 
         if plot_tracking:
             # Name for plot of tracking.
@@ -1334,7 +1334,7 @@ class LightCurve(TimeSeriesData):
                                            f"{len(self.list_reference_stars)}refstar.png")
 
             fig, ax = plt.subplots(1, 1, sharey="row", sharex="col", figsize=(8.5, 6.3))
-            ax.set_title(f"Noise Sources in {self.star_id} " r"($m_\mathrm{V}=10.0$)", fontsize=13)
+            ax.set_title(f"Noise Sources in {self.target_star} " r"($m_\mathrm{V}=10.0$)", fontsize=13)
             ax.plot_date(jdutc_times.plot_date, self.sigma_total[~nan_mask] * 100, "k-",
                          label=r"$\sigma_{\mathrm{total}}$")
             ax.plot_date(jdutc_times.plot_date, self.sigma_scint[~nan_mask] * 100,
