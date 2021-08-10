@@ -98,7 +98,14 @@ class TimeSeriesData:
 
         # Positional Arguments
         self.target_star = target_star
-        self.data_directory = data_directory
+
+        # Data directory.
+        self._data_directory = data_directory
+
+        # Output directory for light curves
+        self._output_directory = data_directory + "TimeSeries_Analysis"
+        os.makedirs(self._output_directory, exist_ok=True)
+
         self.search_pattern = search_pattern
         self.list_reference_stars = list_reference_stars
         self.telescope = telescope
@@ -127,7 +134,7 @@ class TimeSeriesData:
             self._from_coordinates = False
 
         # Output directory for logs
-        logs_dir = self.data_directory + "logs_photometry"
+        logs_dir = self._data_directory + "logs_photometry"
         os.makedirs(logs_dir, exist_ok=True)
 
         # Logger to track activity of the class
@@ -319,8 +326,8 @@ class TimeSeriesData:
         x_cen, y_cen = self._estimate_centroid_via_2dgaussian(epsf.data, mask=masked_eff_psf.mask)
 
         # Output directory for ePSF
-        output_directory = self.data_directory + "ePSF"
-        os.makedirs(output_directory, exist_ok=True)
+        output_directory = self._data_directory + "ePSF"
+        os.makedirs(self._data_directory + "ePSF", exist_ok=True)
 
         epsf_name = os.path.join(output_directory, "ePSF.png")
 
@@ -434,7 +441,7 @@ class TimeSeriesData:
         """
 
         # Output directory for all the cutouts
-        output_directory = self.data_directory + f"{star_id}_Cutouts"
+        output_directory = self._data_directory + f"{star_id}_Cutouts"
         os.makedirs(output_directory, exist_ok=True)
 
         if filename.endswith(".fz"):
@@ -720,7 +727,7 @@ class TimeSeriesData:
          x_pos_target,
          y_pos_target,
          times,
-         airmasses) = self.do_photometry(self.target_star, self.data_directory, self.search_pattern,
+         airmasses) = self.do_photometry(self.target_star, self._data_directory, self.search_pattern,
                                          ra_star=self.ra_target, dec_star=self.dec_target,
                                          make_effective_psf=False, save_cutout=True)
 
@@ -793,10 +800,10 @@ class TimeSeriesData:
             self.logger.debug(f"Aperture photometry of {ref_star}\n")
             (refer_flux,
              background_in_ref_star,
-             _, _, _, _,
-             ref_airmasses) = self.do_photometry(ref_star, self.data_directory, self.search_pattern,
-                                                 ra_ref_star, dec_ref_star,
-                                                 make_effective_psf=False)
+             _, _, _, _, ref_airmasses) = self.do_photometry(ref_star, self._data_directory,
+                                                             self.search_pattern,
+                                                             ra_ref_star, dec_ref_star,
+                                                             make_effective_psf=False)
             reference_star_flux_sec.append(np.asarray(refer_flux) / exptimes)
             background_in_ref_star_sec.append(np.asarray(background_in_ref_star) / exptimes)
             reference_airmasses.append(np.asarray(ref_airmasses))
@@ -846,19 +853,13 @@ class TimeSeriesData:
               f"with {len(self.good_frames_list)} frames "
               f"of camera {self.instrument} (run time: {exec_time:.3f} sec)\n")
 
-        # Output directory
-        self.output_dir_name = "TimeSeries_Analysis"
-        output_directory = self.data_directory + self.output_dir_name
-        os.makedirs(output_directory, exist_ok=True)
-
         if save_rms:
             # Output directory for files that contain photometric precisions
-            output_directory = output_directory + "/rms_precisions"
+            output_directory = self._output_directory + "/rms_precisions"
             os.makedirs(output_directory, exist_ok=True)
 
             # File with rms information
-            file_rms_name = os.path.join(output_directory,
-                                         f"rms_{self.instrument}.txt")
+            file_rms_name = os.path.join(output_directory, f"rms_{self.instrument}.txt")
 
             with open(file_rms_name, "a") as file:
                 file.write(f"{self.r} {self.std} {self.std_binned} "
@@ -1066,9 +1067,6 @@ class LightCurve(TimeSeriesData):
         ------------------
         """
 
-        # Output directory for lightcurves
-        lightcurves_directory = self.data_directory + self.output_dir_name
-
         pd.plotting.register_matplotlib_converters()
 
         # Remove invalid values such as nan, infs, etc
@@ -1148,7 +1146,7 @@ class LightCurve(TimeSeriesData):
         fig = plt.figure(figsize=(6.0, 5.0))
 
         # Name for boxplot.
-        violin_name = os.path.join(lightcurves_directory, "Violinplot_cam"
+        violin_name = os.path.join(self._output_directory, "Violinplot_cam"
                                    f"{self.instrument}_rad{self.r}pix_"
                                    f"{len(self.list_reference_stars)}refstar.png")
 
@@ -1189,7 +1187,7 @@ class LightCurve(TimeSeriesData):
             results = self.model_lightcurve(time_bjd, normalized_flux)
 
             # Name for folded light curve.
-            model_lightcurve_name = os.path.join(lightcurves_directory, "Model_lightcurve_cam"
+            model_lightcurve_name = os.path.join(self._output_directory, "Model_lightcurve_cam"
                                                  f"{self.instrument}_rad{self.r}pix_"
                                                  f"{len(self.list_reference_stars)}refstar.png")
 
@@ -1210,7 +1208,7 @@ class LightCurve(TimeSeriesData):
             print(f"Folded model of the light curve of {self.target_star} was plotted\n")
 
             # Name for periodogram.
-            periodogram_name = os.path.join(lightcurves_directory, "Periodogram_cam"
+            periodogram_name = os.path.join(self._output_directory, "Periodogram_cam"
                                             f"{self.instrument}_rad{self.r}pix_"
                                             f"{len(self.list_reference_stars)}refstar.png")
 
@@ -1240,7 +1238,7 @@ class LightCurve(TimeSeriesData):
         std = np.nanstd(normalized_flux)
 
         # Name for light curve.
-        lightcurve_name = os.path.join(lightcurves_directory, "Lightcurve_cam"
+        lightcurve_name = os.path.join(self._output_directory, "Lightcurve_cam"
                                        f"{self.instrument}_rad{self.r}pix_"
                                        f"{len(self.list_reference_stars)}refstar.png")
 
@@ -1308,7 +1306,7 @@ class LightCurve(TimeSeriesData):
 
         if plot_tracking:
             # Name for plot of tracking.
-            plot_tracking_name = os.path.join(lightcurves_directory, "tracking_plot_cam"
+            plot_tracking_name = os.path.join(self._output_directory, "tracking_plot_cam"
                                               f"{self.instrument}_rad{self.r}pix_"
                                               f"{len(self.list_reference_stars)}refstar.png")
 
@@ -1329,7 +1327,7 @@ class LightCurve(TimeSeriesData):
 
         if plot_noise_sources:
             # Name for plot of noise sources.
-            plot_noise_name = os.path.join(lightcurves_directory, "noises_plot_cam"
+            plot_noise_name = os.path.join(self._output_directory, "noises_plot_cam"
                                            f"{self.instrument}_rad{self.r}pix_"
                                            f"{len(self.list_reference_stars)}refstar.png")
 
