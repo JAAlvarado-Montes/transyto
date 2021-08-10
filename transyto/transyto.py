@@ -489,7 +489,8 @@ class TimeSeriesData:
         fig.savefig(fig_cutouts_name)
         plt.close(fig)
 
-    def make_aperture(self, data, coordinates, radius, r_in, r_out,
+    @staticmethod
+    def make_aperture(data, coordinates, radius, r_in, r_out,
                       method="exact", subpixels=10):
         """Make the aperture sum in each positions for a given star. It
            can be rectangular (e.g. square), circular or annular
@@ -569,10 +570,8 @@ class TimeSeriesData:
         # For consistent outputs in table
         phot_table["object_bkg_subtracted"].info.format = "%.8g"
 
-        self.logger.debug(phot_table)
-
-        return (phot_table["object_bkg_subtracted"].item(),
-                phot_table["object_bkg"].item())
+        return (phot_table["object_bkg_subtracted"].item(), phot_table["object_bkg"].item(),
+                phot_table)
 
     # @logged
     def do_photometry(self, star_id, data_directory, search_pattern, ra_star=None, dec_star=None,
@@ -654,10 +653,12 @@ class TimeSeriesData:
                 time = self.obs_time
 
                 # Sum of counts inside aperture
-                counts_in_aperture, bkg_in_object = self.make_aperture(data, (y_cen, x_cen),
-                                                                       radius=self.r,
-                                                                       r_in=self.r_in,
-                                                                       r_out=self.r_out)
+                (counts_in_aperture,
+                    bkg_in_object,
+                    phot_table) = self.make_aperture(data, (y_cen, x_cen), radius=self.r,
+                                                     r_in=self.r_in, r_out=self.r_out)
+
+                self.logger.debug(phot_table)
 
                 object_counts.append(counts_in_aperture)
                 background_in_object.append(bkg_in_object)
@@ -908,7 +909,8 @@ class LightCurve(TimeSeriesData):
 
         return flux[mask], mask
 
-    def clean_timeseries(self, time, flux, flux_error, return_mask=False, **kwargs):
+    @staticmethod
+    def clean_timeseries(time, flux, flux_error, return_mask=False, **kwargs):
         """Clean timeseries data of nans, infs, etc.
 
         Parameters
@@ -941,7 +943,8 @@ class LightCurve(TimeSeriesData):
 
         return clean_time, clean_flux, clean_flux_errors
 
-    def detrend_timeseries(self, time, flux, R_star=None, M_star=None, Porb=None):
+    @staticmethod
+    def detrend_timeseries(time, flux, R_star=None, M_star=None, Porb=None):
         """Detrend time-series data
 
         Parameters
@@ -982,7 +985,8 @@ class LightCurve(TimeSeriesData):
 
         return detrended_flux
 
-    def bin_timeseries(self, time, flux, bins):
+    @staticmethod
+    def bin_timeseries(time, flux, bins):
         """Bin data into groups by usinf the mean of each group
 
         Parameters
@@ -1013,7 +1017,8 @@ class LightCurve(TimeSeriesData):
 
         return binned_times, binned_flux
 
-    def model_lightcurve(self, time, flux):
+    @staticmethod
+    def model_lightcurve(time, flux):
         """Summary
         """
 

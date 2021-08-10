@@ -9,7 +9,7 @@ from_coords = False
 
 # Name or coordinates of reference stars.
 # reference_stars = ["CD-48 14211", "CD-48 14215", "CD-48 14225", "CD-48 14210"]
-reference_stars = ["CD-48 14225", "CD-48 14210", "CD-48 14211"]
+reference_stars = ["CD-48 14210", "CD-48 14211", "CD-48 14225"]
 
 refs_ra = [336.69230777, 336.7437907, 336.90741707, 337.5871838]
 refs_dec = [-48.35990944, -48.32531778, -47.95336391, -47.63612619]
