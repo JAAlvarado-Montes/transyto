@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
     lightcurve = LightCurve(**vars(args))
 
-    time, flux, error = lightcurve.get_relative_flux()
+    time, flux, flux_uncertainty = lightcurve.get_relative_flux()
 
-    lightcurve.plot(time, flux, error, plot_tracking=True, plot_noise_sources=True,
-                    bins=3, detrend=False, model_transit=False)
+    lightcurve.plot(time=time, flux=flux, flux_uncertainty=flux_uncertainty, plot_tracking=True,
+                    plot_noise_sources=True, bins=3, detrend=False, model_transit=False)
