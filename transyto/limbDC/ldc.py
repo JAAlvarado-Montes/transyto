@@ -1118,9 +1118,9 @@ def compute(Teff=None, grav=None, metal=None, vturb=-1, RF=None, FT=None, min_w=
 
     Example
     -------
-    >>> import get_lds as lds
-    >>> ldc1 = lds.lds(ifile="input_files/example_input_file.dat")
-    >>> ldc2 = lds.lds(5500.0, 4.5, 0.0, -1, "KpHiRes", "A100,P100")
+    import get_lds as lds
+    ldc1 = lds.lds(ifile="input_files/example_input_file.dat")
+    ldc2 = lds.lds(5500.0, 4.5, 0.0, -1, "KpHiRes", "A100,P100")
     """
 
     if (Teff is None or grav is None or metal is None or RF is None or FT is None):
