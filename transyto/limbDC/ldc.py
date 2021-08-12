@@ -314,8 +314,8 @@ def downloader(url):
     This function downloads a file from the given url using wget.
     """
     file_name = url.split('/')[-1]
-    print('\t      + Downloading file {:s} from {:s}.'.format(file_name, url))
-    os.system('wget ' + url)
+    print('\t             > Downloading file {:s} from {:s}.'.format(file_name, url))
+    os.system('wget -q ' + url)
 
 
 def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
@@ -327,8 +327,8 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
     Robert L. Kurucz's website (kurucz.harvard.edu/grids.html).
     """
     if not os.path.exists(rootdir + '/atlas_models'):
-        os.mkdir(rootdir + '/atlas_models')
-        os.mkdir(rootdir + '/atlas_models/raw_models')
+        os.makedirs(rootdir + '/atlas_models', exist_ok=True)
+        os.makedirs(rootdir + '/atlas_models/raw_models', exist_ok=True)
 
     model_path = rootdir + '/atlas_models/'
 
@@ -394,7 +394,7 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
     else:
         # If not in the system, download it from Kurucz's website.
         # First, check all possible files to download:
-        print('\t    + Model file not found.')
+        print('\t           > Model file not found.')
         response = urlopen('http://kurucz.harvard.edu/grids/grid' + met_dir + '/')
         html = str(response.read())
         ok = True
@@ -420,7 +420,7 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
                 downloader('http://kurucz.harvard.edu/grids/grid'
                            + met_dir + '/' + afname)
                 if not os.path.exists(araw):
-                    os.mkdir(araw)
+                    os.makedirs(araw, exist_ok=True)
                 os.rename(afname, araw + afname)
 
         if not hasnew:
@@ -430,7 +430,7 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
                     downloader('http://kurucz.harvard.edu/grids/grid'
                                + met_dir + '/' + afname)
                     if not os.path.exists(araw):
-                        os.mkdir(araw)
+                        os.makedirs(araw, exist_ok=True)
                     os.rename(afname, araw + afname)
             if not gotit:
                 for afname in filenames:
@@ -439,7 +439,7 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
                         downloader('http://kurucz.harvard.edu/grids/grid'
                                    + met_dir + '/' + afname)
                         if not os.path.exists(araw):
-                            os.mkdir(araw)
+                            os.makedirs(araw, exist_ok=True)
                         os.rename(afname, araw + afname)
         if not gotit:
             print('\t > No model with closest metallicity of {} and closest '
@@ -461,12 +461,12 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
                 # Create folder for current metallicity and turbulent
                 # velocity if not created already:
                 if not os.path.exists(model_path + amodel):
-                    os.mkdir(model_path + amodel)
+                    os.makedirs(model_path + amodel, exist_ok=True)
                 # Save files in the folder:
                 while True:
                     TEFF, GRAVITY, LH = getATLASStellarParams(lines)
                     if not os.path.exists(model_path + amodel + '/' + TEFF):
-                        os.mkdir(model_path + amodel + '/' + TEFF)
+                        os.makedirs(model_path + amodel + '/' + TEFF, exist_ok=True)
                     idx, mus = getIntensitySteps(lines)
                     save_mr_file = True
                     if os.path.exists(model_path + amodel + '/' + TEFF
@@ -555,8 +555,8 @@ def PHOENIX_model_search(s_met, s_grav, s_teff, s_vturb):
     """
 
     if not os.path.exists(rootdir + '/phoenix_models'):
-        os.mkdir(rootdir + '/phoenix_models')
-        os.mkdir(rootdir + '/phoenix_models/raw_models')
+        os.makedirs(rootdir + '/phoenix_models', exist_ok=True)
+        os.makedirs(rootdir + '/phoenix_models/raw_models', exist_ok=True)
 
     # Path to the PHOENIX models
     model_path = rootdir + '/phoenix_models/raw_models/'
@@ -603,7 +603,7 @@ def PHOENIX_model_search(s_met, s_grav, s_teff, s_vturb):
     # PHOENIX models that are closer in temperature and gravity to the
     # user input values:
     if not os.path.exists(chosen_met_folder):
-        os.mkdir(chosen_met_folder)
+        os.makedirs(chosen_met_folder, exist_ok=True)
     cwd = os.getcwd()
     os.chdir(chosen_met_folder)
 

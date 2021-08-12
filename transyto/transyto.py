@@ -1045,7 +1045,7 @@ class LightCurve(TimeSeriesAnalysis):
         """
 
         model = transitleastsquares(time, flux)
-        results = model.power(u=limb_dc)
+        results = model.power(u=limb_dc, oversampling_factor=5, duration_grid_step=1.02)
 
         print(f"\n{8 * '-'}>\tStarting model of light curve...\n")
         print(f"{8 * ' '}\t • Period: {results.period:.5f} d")
