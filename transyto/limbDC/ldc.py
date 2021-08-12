@@ -3,6 +3,7 @@ import sys
 import os
 import numpy as np
 import glob
+import subprocess
 if sys.version_info.major == 2:
     from urllib2 import urlopen
 else:
@@ -1138,5 +1139,8 @@ def compute(Teff=None, grav=None, metal=None, vturb=-1, RF=None, FT=None, min_w=
             LDC.append(calc_lds(*iset))
 
     print("         \t • LD calculation finished without problems.\n")
+
+    if os.path.exists(rootdir + '/atlas_models'):
+        subprocess.run(f"rm -rf {rootdir}/atlas_models", shell=True, check=True)
 
     return LDC
