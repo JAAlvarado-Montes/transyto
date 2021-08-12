@@ -41,6 +41,8 @@ from photutils.psf import extract_stars
 from photutils.psf.epsf import EPSFBuilder
 
 from . import PACKAGEDIR
+from transyto.limbDC import ldc
+
 from transyto.utils import (
     search_files_across_directories,
     catalog,
@@ -53,19 +55,19 @@ from transyto.noise import (
     compute_noises
 )
 
-__all__ = ['TimeSeriesData', 'LightCurve']
+__all__ = ['TimeSeriesAnalysis', 'LightCurve']
 
 
 warnings.simplefilter('ignore', category=AstropyWarning)
 
 
-class TimeSeriesData:
+class TimeSeriesAnalysis:
     """Photometry Class"""
 
     def __init__(self, target_star="", data_directory="", search_pattern="*fit*",
                  list_reference_stars=[], aperture_radius=15, from_coordinates=None, ra_target=None,
                  dec_target=None, transit_times=[], ra_ref_stars=[], dec_ref_stars=[],
-                 telescope="", flux_table=""):
+                 telescope=""):
         """Initialize class Photometry for a given target and reference stars.
 
         Parameters
@@ -104,13 +106,9 @@ class TimeSeriesData:
         self._data_directory = data_directory
 
         # Output directory for light curves
-        if flux_table:
-            self._output_directory = os.path.dirname(flux_table) + "/"
-            self._flux_table = flux_table
-        else:
+        if self._data_directory:
             self._output_directory = data_directory + "Light_Curve_Analysis"
-            self._flux_table = None
-        os.makedirs(self._output_directory, exist_ok=True)
+            os.makedirs(self._output_directory, exist_ok=True)
 
         self.search_pattern = search_pattern
         self.list_reference_stars = list_reference_stars
@@ -141,21 +139,22 @@ class TimeSeriesData:
             self._from_coordinates = False
 
         # Output directory for logs
-        logs_dir = self._data_directory + "logs_photometry"
-        os.makedirs(logs_dir, exist_ok=True)
+        if self._data_directory:
+            logs_dir = self._data_directory + "logs_photometry"
+            os.makedirs(logs_dir, exist_ok=True)
 
-        # Logger to track activity of the class
-        self.logger = logging.getLogger(f"{self.pipeline} logger")
-        self.logger.addHandler(logging.FileHandler(filename=os.path.join(logs_dir,
-                                                                         'photometry.log'),
-                                                   mode='w'))
-        self.logger.setLevel(logging.DEBUG)
+            # Logger to track activity of the class
+            self.logger = logging.getLogger(f"{self.pipeline} logger")
+            self.logger.addHandler(logging.FileHandler(filename=os.path.join(logs_dir,
+                                                                             'photometry.log'),
+                                                       mode='w'))
+            self.logger.setLevel(logging.DEBUG)
 
-        self.logger.info(pyfiglet.figlet_format(f"-*- {self.pipeline} -*-"))
+            self.logger.info(pyfiglet.figlet_format(f"-*- {self.pipeline} -*-"))
 
-        print(pyfiglet.figlet_format(f"-*- {self.pipeline} -*-\n"))
-        print("{} will use {} reference stars for the differential photometry\n".
-              format(self.pipeline, len(self.list_reference_stars)))
+    @classmethod
+    def get_class_name(cls):
+        return cls.__name__
 
     @property
     def pipeline(self):
@@ -724,6 +723,11 @@ class TimeSeriesData:
         """
         start = time.time()
 
+        print(pyfiglet.figlet_format(f"-*- {self.pipeline} -*-\n1. Time Series:"))
+
+        print("{} will use {} reference stars for the differential photometry\n".
+              format(self.pipeline, len(self.list_reference_stars)))
+
         print(f"Starting aperture photometry for {self.target_star}\n")
 
         self.logger.debug(f"-------------- Aperture photometry of {self.target_star} ---------------\n")
@@ -745,6 +749,9 @@ class TimeSeriesData:
                                                lat=self.telescope_latitude,
                                                longi=self.telescope_longitude,
                                                alt=self.telescope_altitude)
+
+        self.time_norm_factor = 2450000.0  # 2400000.5
+        times = bjdtdb_times[0] - self.time_norm_factor
 
         airmasses = np.asarray(airmasses)
 
@@ -879,14 +886,15 @@ class TimeSeriesData:
                            f"{np.nanmedian(S_to_N_obj)} {np.nanmedian(S_to_N_ref)} "
                            f"{np.nanmedian(S_to_N_diff)}\n")
 
-        return (bjdtdb_times[0], differential_flux, self.sigma_total)
+        return (times, differential_flux, self.sigma_total)
 
 
-class LightCurve(TimeSeriesData):
-    def __init__(self, target_star, data_directory, search_pattern, list_reference_stars,
-                 aperture_radius, from_coordinates=True, ra_target=None, dec_target=None,
-                 transit_times=[], ra_ref_stars=None, dec_ref_stars=None, telescope="",
-                 flux_table=""):
+class LightCurve(TimeSeriesAnalysis):
+
+    def __init__(self, target_star, data_directory="", search_pattern="*.fit*",
+                 list_reference_stars=[], aperture_radius=15, from_coordinates=True, ra_target=None,
+                 dec_target=None, transit_times=[], ra_ref_stars=None, dec_ref_stars=None,
+                 telescope=""):
         super(LightCurve, self).__init__(target_star=target_star, data_directory=data_directory,
                                          search_pattern=search_pattern,
                                          list_reference_stars=list_reference_stars,
@@ -897,8 +905,7 @@ class LightCurve(TimeSeriesData):
                                          transit_times=transit_times,
                                          ra_ref_stars=ra_ref_stars,
                                          dec_ref_stars=dec_ref_stars,
-                                         telescope=telescope,
-                                         flux_table=flux_table)
+                                         telescope=telescope)
 
     def clip_outliers(self, flux, sigma_lower=0, sigma_upper=0, **kwargs):
         """Clips out the outliers in flux.
@@ -984,8 +991,8 @@ class LightCurve(TimeSeriesData):
         detrended_flux = flux / trend
 
         if Porb is not None:
-            print(f"Now detrending the time series using queried M_s = {M_star} M_sun, "
-                  + f"R_s = {R_star} R_sun, and P_orb = {Porb} d found from previous model\n")
+            print(f"{8 * '-'}>\tDetrending time series with M_s = {M_star} M_sun, "
+                  + f"R_s = {R_star} R_sun, and P_orb = {Porb:.3f} d found from previous model\n")
 
             # Compute the transit duration
             transit_dur = t14(R_s=R_star, M_s=M_star,
@@ -1033,22 +1040,22 @@ class LightCurve(TimeSeriesData):
         return binned_times, binned_flux
 
     @staticmethod
-    def model_lightcurve(time, flux):
+    def model_lightcurve(time, flux, limb_dc):
         """Summary
         """
 
         model = transitleastsquares(time, flux)
-        results = model.power()
+        results = model.power(u=limb_dc)
 
-        print("Starting model of light curve...\n")
-        print(f"Period: {results.period:.5f} d")
-        print(f"{len(results.transit_times)} transit times in time series: "
+        print(f"\n{8 * '-'}>\tStarting model of light curve...\n")
+        print(f"{8 * ' '}\t • Period: {results.period:.5f} d")
+        print(f"{8 * ' '}\t • {len(results.transit_times)} transit times in time series: "
               f'{[f"{i:0.5f}" for i in results.transit_times]}')
-        print(f"Transit depth: {results.depth:.5f}")
-        print(f"Best duration (days): {results.duration: .5f}")
-        print(f"Signal detection efficiency (SDE): {results.SDE}\n")
+        print(f"{8 * ' '}\t • Transit depth: {results.depth:.5f}")
+        print(f"{8 * ' '}\t • Best duration (days): {results.duration: .5f}")
+        print(f"{8 * ' '}\t • Signal detection efficiency (SDE): {results.SDE}\n")
 
-        print("Finished model of light curve. Plotting model...")
+        print("-------->\tFinished model of light curve. Plotting model...\n")
 
         return results
 
@@ -1081,6 +1088,14 @@ class LightCurve(TimeSeriesData):
         ------------------
         """
 
+        print(pyfiglet.figlet_format(f"2. Light Curve:"))
+
+        # Get the data from the target star.
+        star_data = catalog.StarData(self.target_star).query_from_mast()
+        star_name = star_data["star_name"]
+        star_vmag = star_data["Vmag"]
+        star_tmag = star_data["Tmag"]
+
         if self._flux_table:
             if self._flux_table.endswith(".dat"):
                 sep = "\t"
@@ -1097,8 +1112,6 @@ class LightCurve(TimeSeriesData):
         # Remove invalid values such as nan, infs, etc
         time, flux, flux_uncertainty, nan_mask = self.clean_timeseries(time, flux, flux_uncertainty,
                                                                        return_mask=True)
-        # Time normalization factor.
-        time_norm_factor = 2450000.0  # 2400000.5
 
         # Clip values outside sigma_upper
         if self.transit_times:
@@ -1156,9 +1169,8 @@ class LightCurve(TimeSeriesData):
         # Select unclipped values in the array of flux errors.
         flux_uncertainty = flux_uncertainty[clip_mask]
 
-        # Barycentric Julian Date (BJD) - 2450000.0
-        time_bjd = time - time_norm_factor
-        time_bjd = time_bjd[clip_mask]
+        # Barycentric Julian Date (BJD)
+        time = time[clip_mask]
 
         # Violin plot.
         fig = plt.figure(figsize=(6.0, 5.0))
@@ -1199,10 +1211,15 @@ class LightCurve(TimeSeriesData):
         ax.grid(axis="y", alpha=0.4)
 
         fig.savefig(violin_name, dpi=300)
+        plt.close(fig)
+
+        print("The density distribution of transit data has been plotted\n")
 
         if model_transit or (detrend and model_transit):
-            # flatten_flux = self.detrend_timeseries(time_bjd, flux)
-            results = self.model_lightcurve(time_bjd, normalized_flux)
+            print("Starting transit modeling via TLS:\n")
+
+            # flatten_flux = self.detrend_timeseries(time, flux)
+            results = self.model_lightcurve(time, normalized_flux)
 
             # Name for folded light curve.
             model_lightcurve_name = os.path.join(self._output_directory, "Model_lightcurve_cam"
@@ -1223,7 +1240,7 @@ class LightCurve(TimeSeriesData):
 
             fig.savefig(model_lightcurve_name)
 
-            print(f"Folded model of the light curve of {self.target_star} was plotted\n")
+            print(f"Folded model of the light curve of {star_name} was plotted\n")
 
             # Name for periodogram.
             periodogram_name = os.path.join(self._output_directory, "Periodogram_cam"
@@ -1244,183 +1261,369 @@ class LightCurve(TimeSeriesData):
             fig.savefig(periodogram_name, dpi=300)
 
             # Detrend data using the previous transit model.
-            star_data = catalog.StarData(self.target_star).query_from_mast()
-            # normalized_flux = self.detrend_data(time_bjd, normalized_flux, R_star=star_data["Rs"],
+            # normalized_flux = self.detrend_data(time, normalized_flux, R_star=star_data["Rs"],
             #                                     M_star=star_data["Ms"], Porb=results.period)
 
         # Detrend data without using transit model.
         if detrend and not model_transit:
-            normalized_flux = self.detrend_timeseries(time_bjd, flux)
+            normalized_flux = self.detrend_timeseries(time, flux)
 
         # Standard deviation in ppm for the observation
         std = np.nanstd(normalized_flux)
 
-        if self._flux_table:
-            # Name for light curve.
-            lightcurve_name = os.path.join(self._output_directory, "Lightcurve_cam"
-                                           f"{self.instrument}_rad{self.r}pix_"
-                                           f"{len(self.list_reference_stars)}refstar.png")
+        # Name for light curve.
+        lightcurve_name = os.path.join(self._output_directory, "Lightcurve_cam"
+                                       f"{self.instrument}_rad{self.r}pix_"
+                                       f"{len(self.list_reference_stars)}refstar.png")
 
-            fig, ax = plt.subplots(1, 1,
-                                   sharey="row", sharex="col", figsize=(8.5, 6.3))
-            fig.suptitle(f"Differential Photometry\nTarget Star {self.target_star}, "
-                         f"Aperture = {self.r} pix, Focus: {self.header['FOC-POS']} eu",
-                         fontsize=13)
+        fig, ax = plt.subplots(2, 1,
+                               sharey="row", sharex="col", figsize=(8.5, 6.3))
+        fig.suptitle(f"Differential Photometry\nTarget Star {star_name}, "
+                     f"Vmag={star_vmag} (Tmag={star_tmag}) Aperture = {self.r} pix, ",
+                     f"Focus: {self.header['FOC-POS']} eu", fontsize=13)
 
-            ax.plot(time_bjd, normalized_flux, "k.", ms=3,
-                    label=f"NBin = {self.exptime:.1f} s, std = {std:.2%}")
+        ax[1].plot(time, normalized_flux, "k.", ms=3,
+                   label=f"NBin = {self.exptime:.1f} s, std = {std:.2%}")
 
-            ax.errorbar(time_bjd, normalized_flux, yerr=flux_uncertainty,
-                        fmt="none", ecolor="k", elinewidth=0.8,
-                        label=r"$\sigma_{\mathrm{tot}}=\sqrt{\sigma_{\mathrm{phot}}^{2} "
-                        r"+ \sigma_{\mathrm{sky}}^{2} + \sigma_{\mathrm{scint}}^{2} + "
-                        r"\sigma_{\mathrm{read}}^{2}}$", capsize=0.0)
+        ax[1].errorbar(time, normalized_flux, yerr=flux_uncertainty,
+                       fmt="none", ecolor="k", elinewidth=0.8,
+                       label=r"$\sigma_{\mathrm{tot}}=\sqrt{\sigma_{\mathrm{phot}}^{2} "
+                       r"+ \sigma_{\mathrm{sky}}^{2} + \sigma_{\mathrm{scint}}^{2} + "
+                       r"\sigma_{\mathrm{read}}^{2}}$", capsize=0.0)
 
-            # Binned data and times
-            if bins != 0:
-                binned_times, binned_flux = self.bin_timeseries(time_bjd, normalized_flux, bins)
-                std_binned = np.nanstd(binned_flux)
+        # Binned data and times
+        if bins != 0:
+            binned_times, binned_flux = self.bin_timeseries(time, normalized_flux, bins)
+            std_binned = np.nanstd(binned_flux)
 
-                # Total time for binsize
-                nbin_tot = self.exptime * bins
-                ax.plot(binned_times, binned_flux, "ro", ms=4,
-                        label=f"NBin = {nbin_tot:.1f} s, std = {std_binned:.2%}")
+            # Total time for binsize
+            nbin_tot = self.exptime * bins
+            ax[1].plot(binned_times, binned_flux, "ro", ms=4,
+                       label=f"NBin = {nbin_tot:.1f} s, std = {std_binned:.2%}")
 
-            ax.set_ylabel("Relative Flux", fontsize=13)
-            ax.legend(fontsize=8.0, loc=(0.0, 1.0), ncol=3, framealpha=1.0, frameon=False)
+        ax[1].set_ylabel("Relative Flux", fontsize=13)
+        ax[1].legend(fontsize=8.0, loc=(0.0, 1.0), ncol=3, framealpha=1.0, frameon=False)
 
-            # Plot the ingress, mid-transit, and egress times.
-            if self.transit_times:
-                ax.axvline(ingress - time_norm_factor, c="k", ls="--", alpha=0.5)
-                ax.axvline(mid_transit - time_norm_factor, c="k", ls="--", alpha=0.5)
-                ax.axvline(egress - time_norm_factor, c="k", ls="--", alpha=0.5)
+        for counter in range(len(self.list_reference_stars)):
+            # ax[1].xaxis.set_major_formatter(dates.DateFormatter("%H:%M:%S"))
 
+            # Colors for comparison stars
+            # colors = ["blue", "magenta", "green", "cyan", "firebrick"]
+
+            ax[0].plot(time, self.reference_star_flux_sec[counter][~nan_mask][clip_mask]
+                       / np.nanmean(self.reference_star_flux_sec[counter][~nan_mask][clip_mask]),
+                       "o", ms=1.3, label=f"Ref. {self.list_reference_stars[counter]}")
+            ax[0].set_ylabel("Relative Flux", fontsize=13)
+            # ax[0].set_ylim((0.9, 1.05))
+            ax[0].legend(fontsize=8.1, loc="lower left", ncol=len(self.list_reference_stars),
+                         framealpha=1.0, frameon=True)
+
+        ax[1].text(0.97, 0.9, "b)", fontsize=11, transform=ax[1].transAxes)
+        ax[0].text(0.97, 0.9, "a)", fontsize=11, transform=ax[0].transAxes)
+
+        # Plot the ingress, mid-transit, and egress times.
+        if self.transit_times:
+            ax[1].axvline(ingress - self.time_norm_factor, c="k", ls="--", alpha=0.5)
+            ax[1].axvline(mid_transit - self.time_norm_factor, c="k", ls="--", alpha=0.5)
+            ax[1].axvline(egress - self.time_norm_factor, c="k", ls="--", alpha=0.5)
+
+        ax[1].xaxis.set_major_formatter(plticker.FormatStrFormatter('%.2f'))
+        ax[1].yaxis.set_major_formatter(plticker.FormatStrFormatter('%.2f'))
+
+        plt.xlabel(r"BJD$_\mathrm{TDB}- $" f"{self.time_norm_factor}", fontsize=13)
+        plt.xticks(rotation=30, size=8.0)
+
+        fig.subplots_adjust(hspace=0.2)
+        fig.savefig(lightcurve_name, dpi=300)
+
+        print(f"The light curve of {star_name} was plotted")
+
+        if plot_tracking:
+            # Name for plot of tracking.
+            plot_tracking_name = os.path.join(self._output_directory, "tracking_plot_cam"
+                                              f"{self.instrument}_rad{self.r}pix_"
+                                              f"{len(self.list_reference_stars)}refstar.png")
+
+            fig, ax = plt.subplots(1, 1, figsize=(8.5, 6.3))
+            ax.plot(time, self.x_pos_target[~nan_mask][clip_mask], "ro-",
+                    label="dx [Dec axis]", lw=0.5, ms=1.2)
+            ax.plot(time, self.y_pos_target[~nan_mask][clip_mask], "go-",
+                    label="dy [RA axis]", lw=0.5, ms=1.2)
+            ax.set_ylabel(r"$\Delta$ Pixel", fontsize=13)
+            ax.legend(fontsize=8.6, loc="lower right", ncol=1, framealpha=1.0)
+            ax.set_title(f"Tracking of camera {self.instrument}", fontsize=13)
+            # ax.xaxis.set_major_locator(loc)
             ax.xaxis.set_major_formatter(plticker.FormatStrFormatter('%.3f'))
-            ax.yaxis.set_major_formatter(plticker.FormatStrFormatter('%.3f'))
-
-            plt.xlabel(r"BJD$_\mathrm{TDB}- $" f"{time_norm_factor}", fontsize=13)
+            ax.set_xlabel(f"Time [BJD-{self.time_norm_factor}]", fontsize=13)
             plt.xticks(rotation=30, size=8.0)
+            plt.grid(alpha=0.4)
+            fig.savefig(plot_tracking_name, dpi=300)
 
-            fig.subplots_adjust(hspace=0.2)
-            fig.savefig(lightcurve_name, dpi=300)
-
-            print(f"The light curve of {self.target_star} was plotted")
-
-        else:
-            # Name for light curve.
-            lightcurve_name = os.path.join(self._output_directory, "Lightcurve_cam"
+        if plot_noise_sources:
+            # Name for plot of noise sources.
+            plot_noise_name = os.path.join(self._output_directory, "noises_plot_cam"
                                            f"{self.instrument}_rad{self.r}pix_"
                                            f"{len(self.list_reference_stars)}refstar.png")
 
-            fig, ax = plt.subplots(2, 1,
-                                   sharey="row", sharex="col", figsize=(8.5, 6.3))
-            fig.suptitle(f"Differential Photometry\nTarget Star {self.target_star}, "
-                         f"Aperture = {self.r} pix, Focus: {self.header['FOC-POS']} eu",
-                         fontsize=13)
-
-            ax[1].plot(time_bjd, normalized_flux, "k.", ms=3,
-                       label=f"NBin = {self.exptime:.1f} s, std = {std:.2%}")
-
-            ax[1].errorbar(time_bjd, normalized_flux, yerr=flux_uncertainty,
-                           fmt="none", ecolor="k", elinewidth=0.8,
-                           label=r"$\sigma_{\mathrm{tot}}=\sqrt{\sigma_{\mathrm{phot}}^{2} "
-                           r"+ \sigma_{\mathrm{sky}}^{2} + \sigma_{\mathrm{scint}}^{2} + "
-                           r"\sigma_{\mathrm{read}}^{2}}$", capsize=0.0)
-
-            # Binned data and times
-            if bins != 0:
-                binned_times, binned_flux = self.bin_timeseries(time_bjd, normalized_flux, bins)
-                std_binned = np.nanstd(binned_flux)
-
-                # Total time for binsize
-                nbin_tot = self.exptime * bins
-                ax[1].plot(binned_times, binned_flux, "ro", ms=4,
-                           label=f"NBin = {nbin_tot:.1f} s, std = {std_binned:.2%}")
-
-            ax[1].set_ylabel("Relative Flux", fontsize=13)
-            ax[1].legend(fontsize=8.0, loc=(0.0, 1.0), ncol=3, framealpha=1.0, frameon=False)
-
-            for counter in range(len(self.list_reference_stars)):
-                # ax[1].xaxis.set_major_formatter(dates.DateFormatter("%H:%M:%S"))
-
-                # Colors for comparison stars
-                # colors = ["blue", "magenta", "green", "cyan", "firebrick"]
-
-                ax[0].plot(time_bjd, self.reference_star_flux_sec[counter][~nan_mask][clip_mask]
-                           / np.nanmean(self.reference_star_flux_sec[counter][~nan_mask][clip_mask]),
-                           "o", ms=1.3, label=f"Ref. {self.list_reference_stars[counter]}")
-                ax[0].set_ylabel("Relative Flux", fontsize=13)
-                # ax[0].set_ylim((0.9, 1.05))
-                ax[0].legend(fontsize=8.1, loc="lower left", ncol=len(self.list_reference_stars),
-                             framealpha=1.0, frameon=True)
-
-            ax[1].text(0.97, 0.9, "b)", fontsize=11, transform=ax[1].transAxes)
-            ax[0].text(0.97, 0.9, "a)", fontsize=11, transform=ax[0].transAxes)
-
-            # Plot the ingress, mid-transit, and egress times.
-            if self.transit_times:
-                ax[1].axvline(ingress - time_norm_factor, c="k", ls="--", alpha=0.5)
-                ax[1].axvline(mid_transit - time_norm_factor, c="k", ls="--", alpha=0.5)
-                ax[1].axvline(egress - time_norm_factor, c="k", ls="--", alpha=0.5)
-
-            ax[1].xaxis.set_major_formatter(plticker.FormatStrFormatter('%.3f'))
-            ax[1].yaxis.set_major_formatter(plticker.FormatStrFormatter('%.3f'))
-
-            plt.xlabel(r"BJD$_\mathrm{TDB}- $" f"{time_norm_factor}", fontsize=13)
+            fig, ax = plt.subplots(1, 1, sharey="row", sharex="col", figsize=(8.5, 6.3))
+            ax.set_title(f"Noise Sources in {star_name} " r"($m_\mathrm{V}=10.0$)", fontsize=13)
+            ax.plot_date(self.jdutc_times.plot_date, self.sigma_total[~nan_mask] * 100, "k-",
+                         label=r"$\sigma_{\mathrm{total}}$")
+            ax.plot_date(self.jdutc_times.plot_date, self.sigma_scint[~nan_mask] * 100,
+                         "g-", label=r"$\sigma_{\mathrm{scint}}$")
+            ax.plot_date(self.jdutc_times.plot_date, self.sigma_phot[~nan_mask] * 100,
+                         color="firebrick", ls="-", marker=None, label=r"$\sigma_{\mathrm{phot}}$")
+            ax.plot_date(self.jdutc_times.plot_date, self.sigma_sky[~nan_mask] * 100,
+                         "b-", label=r"$\sigma_{\mathrm{sky}}$")
+            ax.plot_date(self.jdutc_times.plot_date, self.sigma_ron[~nan_mask] * 100,
+                         "r-", label=r"$\sigma_{\mathrm{read}}$")
+            ax.legend(loc="upper center", bbox_to_anchor=(0.5, 0.998), fancybox=True,
+                      ncol=5, frameon=True, fontsize=8.1)
+            # ax.set_yscale("log")
+            ax.tick_params(axis="both", direction="in")
+            ax.set_ylabel("Amplitude Error [%]", fontsize=13)
             plt.xticks(rotation=30, size=8.0)
+            ax.set_xlabel("Time [UTC]", fontsize=13)
+            # ax.set_ylim((0.11, 0.48))
+            ax.xaxis.set_major_formatter(dates.DateFormatter("%H:%M:%S"))
+            plt.grid(alpha=0.4)
+            fig.savefig(plot_noise_name, dpi=300)
 
-            fig.subplots_adjust(hspace=0.2)
-            fig.savefig(lightcurve_name, dpi=300)
+    def plot_from_table(self, table, exptime=30, bins=5, detrend=False, model_transit=False,
+                        x_label="Time"):
 
-            print(f"The light curve of {self.target_star} was plotted")
+        print(pyfiglet.figlet_format(f"* LightCurve *")
+              + "\t     Part of transyto package by Jaime A. Alvarado-Montes\n")
 
-            if plot_tracking:
-                # Name for plot of tracking.
-                plot_tracking_name = os.path.join(self._output_directory, "tracking_plot_cam"
-                                                  f"{self.instrument}_rad{self.r}pix_"
-                                                  f"{len(self.list_reference_stars)}refstar.png")
+        # Get the data from the target star.
+        star_data = catalog.StarData(self.target_star).query_from_mast()
+        star_name = star_data["star_name"]
+        star_vmag = star_data["Vmag"]
+        star_tmag = star_data["Tmag"]
 
-                fig, ax = plt.subplots(1, 1, figsize=(8.5, 6.3))
-                ax.plot(time_bjd, self.x_pos_target[~nan_mask][clip_mask], "ro-",
-                        label="dx [Dec axis]", lw=0.5, ms=1.2)
-                ax.plot(time_bjd, self.y_pos_target[~nan_mask][clip_mask], "go-",
-                        label="dy [RA axis]", lw=0.5, ms=1.2)
-                ax.set_ylabel(r"$\Delta$ Pixel", fontsize=13)
-                ax.legend(fontsize=8.6, loc="lower right", ncol=1, framealpha=1.0)
-                ax.set_title(f"Tracking of camera {self.instrument}", fontsize=13)
-                # ax.xaxis.set_major_locator(loc)
-                ax.xaxis.set_major_formatter(plticker.FormatStrFormatter('%.3f'))
-                ax.set_xlabel(f"Time [BJD-{time_norm_factor}]", fontsize=13)
-                plt.xticks(rotation=30, size=8.0)
-                plt.grid(alpha=0.4)
-                fig.savefig(plot_tracking_name, dpi=300)
+        # Name for light curve.
+        output_directory = os.path.dirname(table) + "/"
+        os.makedirs(output_directory, exist_ok=True)
 
-            if plot_noise_sources:
-                # Name for plot of noise sources.
-                plot_noise_name = os.path.join(self._output_directory, "noises_plot_cam"
-                                               f"{self.instrument}_rad{self.r}pix_"
-                                               f"{len(self.list_reference_stars)}refstar.png")
+        if table.endswith(".dat"):
+            sep = "\t"
+        if table.endswith(".csv"):
+            sep = ";"
+        table = pd.read_csv(table, usecols=["time", "flux", "flux_uncertainty"], delimiter=sep)
+        index = 1000
+        time = np.array(table["time"]).astype(np.float)[:index]
+        flux = np.array(table["flux"]).astype(np.float)[:index]
+        flux_uncertainty = np.array(table["flux_uncertainty"]).astype(np.float)[:index]
 
-                fig, ax = plt.subplots(1, 1, sharey="row", sharex="col", figsize=(8.5, 6.3))
-                ax.set_title(f"Noise Sources in {self.target_star} " r"($m_\mathrm{V}=10.0$)", fontsize=13)
-                ax.plot_date(self.jdutc_times.plot_date, self.sigma_total[~nan_mask] * 100, "k-",
-                             label=r"$\sigma_{\mathrm{total}}$")
-                ax.plot_date(self.jdutc_times.plot_date, self.sigma_scint[~nan_mask] * 100,
-                             "g-", label=r"$\sigma_{\mathrm{scint}}$")
-                ax.plot_date(self.jdutc_times.plot_date, self.sigma_phot[~nan_mask] * 100, color="firebrick",
-                             ls="-", marker=None, label=r"$\sigma_{\mathrm{phot}}$")
-                ax.plot_date(self.jdutc_times.plot_date, self.sigma_sky[~nan_mask] * 100,
-                             "b-", label=r"$\sigma_{\mathrm{sky}}$")
-                ax.plot_date(self.jdutc_times.plot_date, self.sigma_ron[~nan_mask] * 100,
-                             "r-", label=r"$\sigma_{\mathrm{read}}$")
-                ax.legend(loc="upper center", bbox_to_anchor=(0.5, 0.998), fancybox=True,
-                          ncol=5, frameon=True, fontsize=8.1)
-                # ax.set_yscale("log")
-                ax.tick_params(axis="both", direction="in")
-                ax.set_ylabel("Amplitude Error [%]", fontsize=13)
-                plt.xticks(rotation=30, size=8.0)
-                ax.set_xlabel("Time [UTC]", fontsize=13)
-                # ax.set_ylim((0.11, 0.48))
-                ax.xaxis.set_major_formatter(dates.DateFormatter("%H:%M:%S"))
-                plt.grid(alpha=0.4)
-                fig.savefig(plot_noise_name, dpi=300)
+        pd.plotting.register_matplotlib_converters()
+
+        # Remove invalid values such as nan, infs, etc
+        time, flux, flux_uncertainty, nan_mask = self.clean_timeseries(time, flux, flux_uncertainty,
+                                                                       return_mask=True)
+
+        # Clip values outside sigma_upper
+        if self.transit_times:
+            jdutc_transit_times = Time(self.transit_times, format='isot', scale='utc')
+            bjdtdb_transit_times = utc_tdb.JDUTC_to_BJDTDB(jdutc_transit_times, hip_id=8102,
+                                                           lat=self.telescope_latitude,
+                                                           longi=self.telescope_longitude,
+                                                           alt=self.telescope_altitude)
+
+            ingress = bjdtdb_transit_times[0][0]
+            mid_transit = bjdtdb_transit_times[0][1]
+            egress = bjdtdb_transit_times[0][2]
+
+            ing_index = np.where(time <= ingress)[0][-1]
+            egr_index = np.where(time >= egress)[0][0]
+
+            # Get the pre-transit and post-transit data.
+            pre_transit_flux = flux[:ing_index]
+            post_transit_flux = flux[egr_index:]
+
+            # Get the in-transit and out-of-transit data.
+            in_transit_flux = flux[ing_index:egr_index]
+            out_of_transit_flux = np.concatenate((pre_transit_flux, post_transit_flux))
+
+            my_box_in = plt.boxplot(in_transit_flux)
+            sigma_lower = my_box_in["caps"][0].get_ydata()[0]
+
+            my_box_out = plt.boxplot(out_of_transit_flux)
+            sigma_upper = my_box_out["caps"][1].get_ydata()[0]
+
+            # Get the flux and mask after clipping the outliers.
+            flux, clip_mask = self.clip_outliers(flux, sigma_lower=sigma_lower,
+                                                 sigma_upper=sigma_upper)
+
+            # Compute the relative/normalized flux of the target star (post-clipping).
+            normalized_flux = flux / np.nanmedian(out_of_transit_flux[out_of_transit_flux
+                                                                      < sigma_upper])
+
+        if not self.transit_times:
+            # Compute the relative/normalized flux of the target star (pre-clipping).
+            normalized_flux = flux / np.nanmedian(flux)
+
+            # Boxplot to identify outliers.
+            my_box = plt.boxplot(normalized_flux)
+            sigma_lower = my_box["caps"][0].get_ydata()[0]
+            sigma_upper = my_box["caps"][1].get_ydata()[0]
+
+            # Get the flux and mask after clipping the outliers.
+            flux, clip_mask = self.clip_outliers(flux, sigma_lower=sigma_lower,
+                                                 sigma_upper=sigma_upper)
+
+            # Compute the relative/normalized flux of the target star (post-clipping).
+            normalized_flux = flux / np.nanmedian(flux)
+
+        # Select unclipped values in the array of flux errors.
+        flux_uncertainty = flux_uncertainty[clip_mask]
+
+        # Barycentric Julian Date (BJD)
+        time = time[clip_mask]
+
+        # Violin plot.
+        fig = plt.figure(figsize=(6.0, 5.0))
+
+        # Name for boxplot.
+        violin_name = os.path.join(output_directory, "Violinplot_cam"
+                                   f"{self.telescope}_rad{self.r}pix.png")
+
+        # ax = sns.swarmplot(y=normalized_flux, color=".25", zorder=3)
+        if self.transit_times:
+            flags = []
+            for f in flux:
+                if f in in_transit_flux:
+                    flags.append("In-transit")
+                else:
+                    flags.append("Out-of-transit")
+
+            flags = np.array(flags)
+
+            df = pd.DataFrame({"flux": pd.Series(normalized_flux), "Data": pd.Series(flags)})
+            df["all"] = ""
+
+            # Violin plot to analyse distribution (with transit times).
+            ax = sns.violinplot(x="all", y="flux", hue="Data", data=df, inner="stick",
+                                linewidth=1.0, split=True, cut=2, bw="silverman")
+
+        if not self.transit_times:
+            # Violin plot to analyse distribution (without transit times).
+            ax = sns.violinplot(y=normalized_flux, inner="box", linewidth=1.0, cut=2,
+                                bw="silverman")
+
+        ax.set_xlabel("Density Distribution", fontsize=11)
+        ax.set_ylabel("Relative flux", fontsize=11)
+
+        ax.set_axisbelow(True)
+        ax.grid(axis="y", alpha=0.4)
+
+        fig.savefig(violin_name, dpi=300)
+        plt.close(fig)
+
+        print(f"{8 * '-'}>\tThe density distribution of transit data has been plotted\n")
+
+        if model_transit or (detrend and model_transit):
+            print("-------->\tStarting transit modeling via Transit Least Squares (Hippke & "
+                  "Heller 2019)\n\n"
+                  "         \t • Computing LD Coefficients v.1.0 (Espinoza $ Jordan 2015)")
+
+            limb_dc = ldc.compute(name="CoRot-5", Teff=star_data["Teff"], RF="KpHiRes", FT="A100",
+                                  grav=star_data["stellar_gravity"], metal=star_data["Fe/H"])[0]
+            ab = (limb_dc[1], limb_dc[2])
+
+            # flatten_flux = self.detrend_timeseries(time, flux)
+            results = self.model_lightcurve(time, normalized_flux, limb_dc=ab)
+
+            # Name for folded light curve.
+            model_lightcurve_name = os.path.join(output_directory, "Model_lightcurve_cam"
+                                                 f"{self.telescope}_rad{self.r}pix.png")
+
+            loc = plticker.MultipleLocator(base=5)  # this locator puts ticks at regular intervals
+
+            fig, ax = plt.subplots(1, 1, figsize=(8.5, 5.0))
+            ax.plot(results.model_folded_phase, results.model_folded_model, color='red')
+            ax.scatter(results.folded_phase, results.folded_y, color='blue', s=10,
+                       alpha=0.5, zorder=2)
+            ax.set_xlim(0.48, 0.52)
+            ax.set_xlabel('Phase')
+            ax.set_ylabel('Relative flux')
+            ax.xaxis.set_major_locator(loc)
+            ax.xaxis.set_major_formatter(plticker.FormatStrFormatter('%.1f'))
+
+            fig.savefig(model_lightcurve_name)
+
+            print(f"-------->\tFolded model of the light curve of {star_name} was plotted\n")
+
+            # Name for periodogram.
+            periodogram_name = os.path.join(output_directory, "Periodogram_cam"
+                                            f"{self.telescope}_rad{self.r}pix.png")
+
+            fig, ax = plt.subplots(1, 1, figsize=(8.5, 5.0))
+            ax.axvline(results.period, alpha=0.4, lw=3)
+            # ax.set_xlim(np.min(results.periods), np.max(results.periods))
+            for n in range(2, 10):
+                ax.axvline(n * results.period, alpha=0.4, lw=1, linestyle="dashed")
+                ax.axvline(results.period / n, alpha=0.4, lw=1, linestyle="dashed")
+            ax.set_ylabel(r'SDE')
+            ax.set_xlabel('Period [d]')
+            ax.plot(results.periods, results.power, color='black', lw=0.5)
+            ax.set_xlim(0.0, np.max(results.periods))
+
+            fig.savefig(periodogram_name, dpi=300)
+
+            # Detrend data using the previous transit model.
+            normalized_flux = self.detrend_timeseries(time, normalized_flux, R_star=star_data["Rs"],
+                                                      M_star=star_data["Ms"], Porb=results.period)
+
+        # Detrend data without using transit model.
+        if detrend and not model_transit:
+            normalized_flux = self.detrend_timeseries(time, flux)
+
+        # Standard deviation in ppm for the observation
+        std = np.nanstd(normalized_flux)
+
+        lightcurve_name = os.path.join(output_directory, "Lightcurve_cam"
+                                       f"{self.telescope}_rad{self.r}pix_.png")
+
+        fig, ax = plt.subplots(1, 1,
+                               sharey="row", sharex="col", figsize=(8.5, 6.3))
+        fig.suptitle(f"Differential Photometry\nTarget Star {star_name}, Vmag={star_vmag} "
+                     f"(Tmag={star_tmag}), Aperture = {self.r} pix", fontsize=13)
+
+        ax.plot(time, normalized_flux, "k.", ms=3,
+                label=f"NBin = {exptime:.1f} s, std = {std:.2%}")
+
+        ax.errorbar(time, normalized_flux, yerr=flux_uncertainty,
+                    fmt="none", ecolor="k", elinewidth=0.8,
+                    label=r"$\sigma_{\mathrm{tot}}=\sqrt{\sigma_{\mathrm{phot}}^{2} "
+                    r"+ \sigma_{\mathrm{sky}}^{2} + \sigma_{\mathrm{scint}}^{2} + "
+                    r"\sigma_{\mathrm{read}}^{2}}$", capsize=0.0)
+
+        # Binned data and times
+        if bins != 0:
+            binned_times, binned_flux = self.bin_timeseries(time, normalized_flux, bins)
+            std_binned = np.nanstd(binned_flux)
+
+            # Total time for binsize
+            nbin_tot = exptime * bins
+            ax.plot(binned_times, binned_flux, "ro", ms=4,
+                    label=f"NBin = {nbin_tot:.1f} s, std = {std_binned:.2%}")
+
+        ax.set_ylabel("Relative Flux", fontsize=13)
+        ax.legend(fontsize=8.0, loc=(0.0, 1.0), ncol=3, framealpha=1.0, frameon=False)
+
+        # Plot the ingress, mid-transit, and egress times.
+        if self.transit_times:
+            ax.axvline(ingress, c="k", ls="--", alpha=0.5)
+            ax.axvline(mid_transit, c="k", ls="--", alpha=0.5)
+            ax.axvline(egress, c="k", ls="--", alpha=0.5)
+
+        ax.xaxis.set_major_formatter(plticker.FormatStrFormatter('%.2f'))
+        ax.yaxis.set_major_formatter(plticker.FormatStrFormatter('%.2f'))
+
+        plt.xlabel(f"{x_label}", fontsize=13)
+        plt.xticks(rotation=30, size=8.0)
+
+        fig.subplots_adjust(hspace=0.2)
+        fig.savefig(lightcurve_name, dpi=300)
+
+        print(f"-------->\tThe light curve of {star_name} was plotted\n")
