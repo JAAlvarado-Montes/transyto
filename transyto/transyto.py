@@ -639,7 +639,8 @@ class TimeSeriesAnalysis:
         nddatas = list()
         # projections_list = list()
 
-        for fn in tqdm(fits_files):
+        fmt = "{desc}{percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} frames | {elapsed}<{remaining}"
+        for fn in tqdm(fits_files, desc=f"{18 * ' ' }Progress: ", bar_format=fmt):
             # Get data, header and WCS of fits files with any extension
             data = get_data(fn)
             self.header = get_header(fn)
@@ -723,12 +724,16 @@ class TimeSeriesAnalysis:
         """
         start = time.time()
 
-        print(pyfiglet.figlet_format(f"-*- {self.pipeline} -*-\n1. Time Series:"))
+        print(pyfiglet.figlet_format(f"-*- {self.pipeline} -*-")
+              + f"{16 * '#'}       by Jaime Andrés Alvarado Montes       {16 * '#'}\n")
 
-        print("{} will use {} reference stars for the differential photometry\n".
-              format(self.pipeline, len(self.list_reference_stars)))
+        print(pyfiglet.figlet_format(f"1. Time Series")
+              + "        Part of transyto package by Jaime A. Alvarado-Montes\n")
 
-        print(f"Starting aperture photometry for {self.target_star}\n")
+        print("{}>\t{} will use {} reference stars for differential photometry\n".
+              format(8 * '-', self.pipeline, len(self.list_reference_stars)))
+
+        print(f"{8 * '-'}>\tStarting aperture photometry on target star {self.target_star}:\n")
 
         self.logger.debug(f"-------------- Aperture photometry of {self.target_star} ---------------\n")
         # Get flux of target star
@@ -741,6 +746,8 @@ class TimeSeriesAnalysis:
          airmasses) = self.do_photometry(self.target_star, self._data_directory, self.search_pattern,
                                          ra_star=self.ra_target, dec_star=self.dec_target,
                                          make_effective_psf=False, save_cutout=True)
+
+        print(f"\n{18 * ' '}Finished aperture photometry on target star {self.target_star}\n")
 
         # Get the date times anc compute the Barycentric Julian Date (Barycentric Dynamical Time)
         times = np.asarray(times)
@@ -755,8 +762,7 @@ class TimeSeriesAnalysis:
 
         airmasses = np.asarray(airmasses)
 
-        print(f"Finished aperture photometry on target star. {self.pipeline}"
-              " will compute now the combined flux of the ensemble\n")
+        print(f"\n{8 * '-'}>\t{self.pipeline} will compute now the combined flux of the ensemble\n")
 
         # Positions of target star
         self.x_pos_target = np.array(x_pos_target) - np.nanmean(x_pos_target)
@@ -815,7 +821,7 @@ class TimeSeriesAnalysis:
                                                        list_ra_ref_stars,
                                                        list_dec_ref_stars):
 
-            print(f"Starting aperture photometry on ref_star {ref_star}\n")
+            print(f"{16 * ' '}• Starting aperture photometry on reference star {ref_star}\n")
 
             self.logger.debug(f"Aperture photometry of {ref_star}\n")
             (refer_flux,
@@ -827,7 +833,7 @@ class TimeSeriesAnalysis:
             reference_star_flux_sec.append(np.asarray(refer_flux) / exptimes)
             background_in_ref_star_sec.append(np.asarray(background_in_ref_star) / exptimes)
             reference_airmasses.append(np.asarray(ref_airmasses))
-            print(f"Finished aperture photometry on ref_star {ref_star}\n")
+            print(f"\n{18 * ' '}Finished aperture photometry on reference star {ref_star}\n")
 
         self.reference_star_flux_sec = np.asarray(reference_star_flux_sec)
         background_in_ref_star_sec = np.asarray(background_in_ref_star_sec)
@@ -869,7 +875,7 @@ class TimeSeriesAnalysis:
         exec_time = end - start
 
         # Print when all of the analysis ends
-        print(f"Differential photometry of {self.target_star} has been finished, "
+        print(f"{8 * '-'}>\tDifferential photometry of {self.target_star} has been finished, "
               f"with {len(self.good_frames_list)} frames "
               f"of camera {self.instrument} (run time: {exec_time:.3f} sec)\n")
 
@@ -891,7 +897,7 @@ class TimeSeriesAnalysis:
 
 class LightCurve(TimeSeriesAnalysis):
 
-    def __init__(self, target_star, data_directory="", search_pattern="*.fit*",
+    def __init__(self, target_star="", data_directory="", search_pattern="*.fit*",
                  list_reference_stars=[], aperture_radius=15, from_coordinates=True, ra_target=None,
                  dec_target=None, transit_times=[], ra_ref_stars=None, dec_ref_stars=None,
                  telescope=""):
@@ -992,7 +998,7 @@ class LightCurve(TimeSeriesAnalysis):
 
         if Porb is not None:
             print(f"{8 * '-'}>\tDetrending time series with M_s = {M_star} M_sun, "
-                  + f"R_s = {R_star} R_sun, and P_orb = {Porb:.3f} d found from previous model\n")
+                  + f"R_s = {R_star} R_sun, and P_orb = {Porb:.3f} d\n")
 
             # Compute the transit duration
             transit_dur = t14(R_s=R_star, M_s=M_star,
@@ -1045,7 +1051,7 @@ class LightCurve(TimeSeriesAnalysis):
         """
 
         model = transitleastsquares(time, flux)
-        results = model.power(u=limb_dc, oversampling_factor=5, duration_grid_step=1.02)
+        results = model.power(u=limb_dc)  # , oversampling_factor=5, duration_grid_step=1.02)
 
         print(f"\n{8 * '-'}>\tStarting model of light curve...\n")
         print(f"{8 * ' '}\t • Period: {results.period:.5f} d")
@@ -1061,7 +1067,7 @@ class LightCurve(TimeSeriesAnalysis):
 
     # @logged
     def plot(self, time=[], flux=[], flux_uncertainty=[], bins=30, detrend=False, plot_tracking=False,
-             plot_noise_sources=False, model_transit=False, date_format=""):
+             plot_noise_sources=False, model_transit=False):
         """Plot a light curve using the flux time series
 
         Parameters
@@ -1088,24 +1094,14 @@ class LightCurve(TimeSeriesAnalysis):
         ------------------
         """
 
-        print(pyfiglet.figlet_format(f"2. Light Curve:"))
+        print(pyfiglet.figlet_format(f"2. Light Curve")
+              + "\t     Part of transyto package by Jaime A. Alvarado-Montes\n")
 
         # Get the data from the target star.
         star_data = catalog.StarData(self.target_star).query_from_mast()
         star_name = star_data["star_name"]
         star_vmag = star_data["Vmag"]
         star_tmag = star_data["Tmag"]
-
-        if self._flux_table:
-            if self._flux_table.endswith(".dat"):
-                sep = "\t"
-            elif self._flux_table.endswith(".csv"):
-                sep = ";"
-            table = pd.read_csv(self._flux_table, usecols=["time", "flux", "flux_uncertainty"],
-                                delimiter=sep)
-            time = table["time"]
-            flux = table["flux"]
-            flux_uncertainty = table["flux_uncertainty"]
 
         pd.plotting.register_matplotlib_converters()
 
@@ -1121,9 +1117,9 @@ class LightCurve(TimeSeriesAnalysis):
                                                            longi=self.telescope_longitude,
                                                            alt=self.telescope_altitude)
 
-            ingress = bjdtdb_transit_times[0][0]
-            mid_transit = bjdtdb_transit_times[0][1]
-            egress = bjdtdb_transit_times[0][2]
+            ingress = bjdtdb_transit_times[0][0] - self.time_norm_factor
+            mid_transit = bjdtdb_transit_times[0][1] - self.time_norm_factor
+            egress = bjdtdb_transit_times[0][2] - self.time_norm_factor
 
             ing_index = np.where(time <= ingress)[0][-1]
             egr_index = np.where(time >= egress)[0][0]
@@ -1279,7 +1275,7 @@ class LightCurve(TimeSeriesAnalysis):
         fig, ax = plt.subplots(2, 1,
                                sharey="row", sharex="col", figsize=(8.5, 6.3))
         fig.suptitle(f"Differential Photometry\nTarget Star {star_name}, "
-                     f"Vmag={star_vmag} (Tmag={star_tmag}) Aperture = {self.r} pix, ",
+                     f"Vmag={star_vmag} (Tmag={star_tmag}) Aperture = {self.r} pix, "
                      f"Focus: {self.header['FOC-POS']} eu", fontsize=13)
 
         ax[1].plot(time, normalized_flux, "k.", ms=3,
@@ -1323,9 +1319,9 @@ class LightCurve(TimeSeriesAnalysis):
 
         # Plot the ingress, mid-transit, and egress times.
         if self.transit_times:
-            ax[1].axvline(ingress - self.time_norm_factor, c="k", ls="--", alpha=0.5)
-            ax[1].axvline(mid_transit - self.time_norm_factor, c="k", ls="--", alpha=0.5)
-            ax[1].axvline(egress - self.time_norm_factor, c="k", ls="--", alpha=0.5)
+            ax[1].axvline(ingress, c="k", ls="--", alpha=0.5)
+            ax[1].axvline(mid_transit, c="k", ls="--", alpha=0.5)
+            ax[1].axvline(egress, c="k", ls="--", alpha=0.5)
 
         ax[1].xaxis.set_major_formatter(plticker.FormatStrFormatter('%.2f'))
         ax[1].yaxis.set_major_formatter(plticker.FormatStrFormatter('%.2f'))
@@ -1400,6 +1396,9 @@ class LightCurve(TimeSeriesAnalysis):
         star_name = star_data["star_name"]
         star_vmag = star_data["Vmag"]
         star_tmag = star_data["Tmag"]
+        star_mass = star_data["Ms"]
+        star_radius = star_data["Rs"]
+        planet_period = star_data["orbital_period"]
 
         # Name for light curve.
         output_directory = os.path.dirname(table) + "/"
@@ -1410,7 +1409,7 @@ class LightCurve(TimeSeriesAnalysis):
         if table.endswith(".csv"):
             sep = ";"
         table = pd.read_csv(table, usecols=["time", "flux", "flux_uncertainty"], delimiter=sep)
-        index = 1000
+        index = 10000
         time = np.array(table["time"]).astype(np.float)[:index]
         flux = np.array(table["flux"]).astype(np.float)[:index]
         flux_uncertainty = np.array(table["flux_uncertainty"]).astype(np.float)[:index]
@@ -1526,9 +1525,14 @@ class LightCurve(TimeSeriesAnalysis):
                   "Heller 2019)\n\n"
                   "         \t • Computing LD Coefficients v.1.0 (Espinoza $ Jordan 2015)")
 
+            # Calculate the limd darkening coefficients.
             limb_dc = ldc.compute(name="CoRot-5", Teff=star_data["Teff"], RF="KpHiRes", FT="A100",
                                   grav=star_data["stellar_gravity"], metal=star_data["Fe/H"])[0]
             ab = (limb_dc[1], limb_dc[2])
+
+            # Detrend data using the previous transit model.
+            normalized_flux = self.detrend_timeseries(time, normalized_flux, R_star=star_radius,
+                                                      M_star=star_mass, Porb=planet_period)
 
             # flatten_flux = self.detrend_timeseries(time, flux)
             results = self.model_lightcurve(time, normalized_flux, limb_dc=ab)
@@ -1537,13 +1541,14 @@ class LightCurve(TimeSeriesAnalysis):
             model_lightcurve_name = os.path.join(output_directory, "Model_lightcurve_cam"
                                                  f"{self.telescope}_rad{self.r}pix.png")
 
-            loc = plticker.MultipleLocator(base=5)  # this locator puts ticks at regular intervals
+            # This locator puts ticks at regular intervals.
+            loc = plticker.MultipleLocator(base=5)
 
             fig, ax = plt.subplots(1, 1, figsize=(8.5, 5.0))
             ax.plot(results.model_folded_phase, results.model_folded_model, color='red')
             ax.scatter(results.folded_phase, results.folded_y, color='blue', s=10,
                        alpha=0.5, zorder=2)
-            ax.set_xlim(0.48, 0.52)
+            # ax.set_xlim(0.48, 0.52)
             ax.set_xlabel('Phase')
             ax.set_ylabel('Relative flux')
             ax.xaxis.set_major_locator(loc)
@@ -1570,10 +1575,6 @@ class LightCurve(TimeSeriesAnalysis):
 
             fig.savefig(periodogram_name, dpi=300)
 
-            # Detrend data using the previous transit model.
-            normalized_flux = self.detrend_timeseries(time, normalized_flux, R_star=star_data["Rs"],
-                                                      M_star=star_data["Ms"], Porb=results.period)
-
         # Detrend data without using transit model.
         if detrend and not model_transit:
             normalized_flux = self.detrend_timeseries(time, flux)
@@ -1592,11 +1593,11 @@ class LightCurve(TimeSeriesAnalysis):
         ax.plot(time, normalized_flux, "k.", ms=3,
                 label=f"NBin = {exptime:.1f} s, std = {std:.2%}")
 
-        ax.errorbar(time, normalized_flux, yerr=flux_uncertainty,
-                    fmt="none", ecolor="k", elinewidth=0.8,
-                    label=r"$\sigma_{\mathrm{tot}}=\sqrt{\sigma_{\mathrm{phot}}^{2} "
-                    r"+ \sigma_{\mathrm{sky}}^{2} + \sigma_{\mathrm{scint}}^{2} + "
-                    r"\sigma_{\mathrm{read}}^{2}}$", capsize=0.0)
+        # ax.errorbar(time, normalized_flux, yerr=flux_uncertainty,
+        #             fmt="none", ecolor="k", elinewidth=0.8,
+        #             label=r"$\sigma_{\mathrm{tot}}=\sqrt{\sigma_{\mathrm{phot}}^{2} "
+        #             r"+ \sigma_{\mathrm{sky}}^{2} + \sigma_{\mathrm{scint}}^{2} + "
+        #             r"\sigma_{\mathrm{read}}^{2}}$", capsize=0.0)
 
         # Binned data and times
         if bins != 0:
