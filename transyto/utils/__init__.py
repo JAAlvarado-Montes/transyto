@@ -168,6 +168,13 @@ def get_value(fn, *args, **kwargs):
     return fits.getval(fn, *args, ext=ext, **kwargs)
 
 
+def set_xaxis_limits(ax, ax1):
+    lim1 = ax.get_xlim()
+    lim2 = ax1.get_xlim()
+
+    return lim2[0] + (ax.get_xticks() - lim1[0]) / (lim1[1] - lim1[0]) * (lim2[1] - lim2[0])
+
+
 def logged(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
