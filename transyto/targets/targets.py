@@ -121,7 +121,8 @@ def filter_transit_observations(exoplanet_file="", toi_file="", local_delta=10,
             else:
                 continue
 
-            ax.set_xlabel(f"{start_date} [UTC]", labelpad=8)
+            ax.set_xlabel(f"{start_date} [UTC] ➡︎", labelpad=8)
+            ax.xaxis.set_label_coords(0.12, -0.11)
 
         colLabels = ("RA", "Dec", "mag", r"$\Delta t$ [h:m]", r"$\delta$ [ppm]",
                      "Coverage [%]", r"$P_\mathrm{orb}$ [d]")
@@ -158,7 +159,7 @@ def filter_transit_observations(exoplanet_file="", toi_file="", local_delta=10,
 
         ax.axvline(morning_twilight, c="k", ls="--", lw=0.8, zorder=1)
         ax.axvline(evening_twilight, c="k", ls="--", lw=0.8, zorder=1)
-        ax.axvline(observatory_midnight, c="firebrick", ls="--", lw=1.2, zorder=1)
+        ax.axvline(observatory_midnight, c="firebrick", ls="--", lw=1.5, zorder=1)
         ax.annotate("MT", (morning_twilight, 1.07), fontsize=9, ha="center", va="top",
                     bbox={'facecolor': 'wheat', 'alpha': 1.0, 'pad': 0.15, 'boxstyle': 'round'})
         ax.annotate("ET", (evening_twilight, 1.07), fontsize=9, ha="center", va="top",
@@ -183,12 +184,14 @@ def filter_transit_observations(exoplanet_file="", toi_file="", local_delta=10,
         ax1.set_xticklabels(local_labels)
 
         ax1.set_xlabel(f"{start_date} [LT] ➡︎")
-        ax1.xaxis.set_label_coords(0.11, 1.15)
+        ax1.xaxis.set_label_coords(0.11, 1.13)
 
         new_date = start_date + datetime.timedelta(days=1)
         trans = ax.get_xaxis_transform()  # x in data untis, y in axes fraction
-        ax.annotate(f"{new_date} [LT] ➡︎", (observatory_midnight, 1.15), fontsize=14,
-                    ha="left", va="center", xycoords=trans)
+        ax.annotate(f"{new_date} [LT] ➡︎", (observatory_midnight, 1.13), fontsize=14,
+                    ha="left", va="center", xycoords=trans, c="firebrick")
+        ax.annotate(f"{new_date} [UTC] ➡︎", (observatory_midnight, -0.14), fontsize=14,
+                    ha="left", va="center", xycoords=trans, c="firebrick")
 
         ax1.tick_params(axis="x", which="major", length=7, rotation=20)
         ax1.tick_params(axis="x", which="minor", length=3)
