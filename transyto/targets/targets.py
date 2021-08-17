@@ -105,8 +105,8 @@ def filter_transit_observations(exoplanet_file="", toi_file="", local_delta=10,
                             obj_label = f"toi {toi}"
                             mag_label = "T"
 
-                        data.append((ra, dec, f"{mag_label} {mag:.1f}", duration,
-                                     depth * 1000, perc, f"{period:.3f}"))
+                        data.append((perc, f"{mag_label} {mag:.1f}", duration, depth * 1000,
+                                     f"{period:.3f}", ra, dec))
                         row_labels.append(obj_label)
                         row_colors.append(color)
 
@@ -132,8 +132,8 @@ def filter_transit_observations(exoplanet_file="", toi_file="", local_delta=10,
             ax.set_xlabel(f"{start_date} [UTC] ➡︎", labelpad=8)
             ax.xaxis.set_label_coords(0.12, -0.11)
 
-        colLabels = ("RA", "Dec", "mag", r"$\Delta t$ [h:m]", r"$\delta$ [ppm]",
-                     "Coverage [%]", r"$P_\mathrm{orb}$ [d]")
+        colLabels = ("Coverage [%]", "mag", r"$\Delta t$ [h:m]", r"$\delta$ [ppm]",
+                     r"$P_\mathrm{orb}$ [d]", "RA", "Dec")
         col_colors = plt.cm.BuPu(np.full(len(colLabels), 0.1))
 
         the_table = ax.table(cellText=data, rowLoc='right', rowColours=row_colors,
