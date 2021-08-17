@@ -73,6 +73,8 @@ def filter_transit_observations(exoplanet_file="", toi_file="", local_delta=10,
         row_labels = []
         row_colors = []
 
+        comparison_coords = []
+
         for (start_date, start_time, end_time, name, coord,
                 perc, depth, duration, period, mag, toi) in zip(start_dates, start_times, end_times,
                                                                 target_names, coords, perc_baselines,
@@ -83,41 +85,47 @@ def filter_transit_observations(exoplanet_file="", toi_file="", local_delta=10,
 
             observatory = Observer.at_site('Siding Spring Observatory')
 
-            color = next(colors)
-
             if (obs_time.jd >= observatory.twilight_evening_nautical(Time(f"{start_date}")).to_value(format="jd") - 0.1
                     and end_time.jd <= observatory.twilight_morning_nautical(end_time).to_value(format="jd") + 0.1):
 
                 with suppress(ValueError):
-
-                    obj_label = f"{name}"
-                    mag_label = "V"
-                    if not pd.isnull(toi):
-                        obj_label = f"toi {toi}"
-                        mag_label = "T"
-
-                    target = FixedTarget(coord=SkyCoord(coord, unit=(u.hourangle, u.deg)),
-                                         name=obj_label)
-
-                    guide_style = {'color': color, 'linewidth': 1.7, "tz": "UTC"}
-                    plot_airmass(target, observatory, obs_time, ax=ax, brightness_shading=True,
-                                 altitude_yaxis=True, style_kwargs=guide_style)
-
-                    # Calculate airmass at start and end time
-                    airmass_start = observatory.altaz(obs_time, target).secz
-                    airmass_end = observatory.altaz(end_time, target).secz
-                    ax.plot_date(obs_time.plot_date, airmass_start, ls="", marker="o",
-                                 ms=5.5, c=color)
-                    ax.plot_date(end_time.plot_date, airmass_end, ls="", marker="o",
-                                 ms=5.5, c=color)
-
                     ra, dec = coord.rsplit()
 
-                    data.append((ra, dec, f"{mag_label} {mag:.1f}", duration,
-                                 depth * 1000, perc, f"{period:.3f}"))
-                    row_labels.append(obj_label)
-                    row_colors.append(color)
+                    comparison_1 = ra[0:-3]
+                    comparison_2 = dec[0:-3]
 
+                    if (comparison_1, comparison_2) not in comparison_coords:
+                        comparison_coords.append((comparison_1, comparison_2))
+
+                        color = next(colors)
+
+                        obj_label = f"{name}"
+                        mag_label = "V"
+                        if not pd.isnull(toi):
+                            obj_label = f"toi {toi}"
+                            mag_label = "T"
+
+                        data.append((ra, dec, f"{mag_label} {mag:.1f}", duration,
+                                     depth * 1000, perc, f"{period:.3f}"))
+                        row_labels.append(obj_label)
+                        row_colors.append(color)
+
+                        target = FixedTarget(coord=SkyCoord(coord, unit=(u.hourangle, u.deg)),
+                                             name=obj_label)
+
+                        guide_style = {'color': color, 'linewidth': 1.7, "tz": "UTC"}
+                        plot_airmass(target, observatory, obs_time, ax=ax, brightness_shading=True,
+                                     altitude_yaxis=True, style_kwargs=guide_style)
+
+                        # Calculate airmass at start and end time
+                        airmass_start = observatory.altaz(obs_time, target).secz
+                        airmass_end = observatory.altaz(end_time, target).secz
+                        ax.plot_date(obs_time.plot_date, airmass_start, ls="", marker="o",
+                                     ms=5.5, c=color)
+                        ax.plot_date(end_time.plot_date, airmass_end, ls="", marker="o",
+                                     ms=5.5, c=color)
+                    else:
+                        continue
             else:
                 continue
 
