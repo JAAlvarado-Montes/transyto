@@ -757,7 +757,7 @@ class TimeSeriesAnalysis:
                                                longi=self.telescope_longitude,
                                                alt=self.telescope_altitude)
 
-        self.time_norm_factor = 2450000.5  # 2400000.5
+        self.time_norm_factor = 2450000.
         times = bjdtdb_times[0] - self.time_norm_factor
 
         airmasses = np.asarray(airmasses)

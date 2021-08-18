@@ -15,3 +15,5 @@ transitleastsquares
 ccdproc
 barycorrpy
 seaborn
+mechanicalsoup
+beautifulsoup4

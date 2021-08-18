@@ -5,6 +5,7 @@ import matplotlib.ticker as plticker
 import numpy as np
 import datetime
 import os
+import requests
 
 from matplotlib.font_manager import FontProperties
 from contextlib import suppress
@@ -15,12 +16,35 @@ from astropy.coordinates import SkyCoord
 from astroplan import FixedTarget, Observer
 from astroplan.plots import plot_airmass
 
+from transyto.targets.swarthmore import configure_transit_finder
 from transyto.utils import set_xaxis_limits
 
 
-def filter_transit_observations(exoplanet_file="", toi_file="", local_delta=10,
-                                cov_threshold=80, mag_threshold=11,
-                                depth_threshold=5):
+def filter_transit_observations(local_delta=10, cov_threshold=80, max_magnitude=11,
+                                min_transit_depth=5, days_to_print=5, time="UTC",
+                                save_tables=False, output_directory=""):
+
+    exoplanet_file = configure_transit_finder(database="exoplanets", table_type="CSV",
+                                              days_to_print=days_to_print, time=time)
+    toi_file = configure_transit_finder(database="tois", table_type="CSV",
+                                        days_to_print=days_to_print, time=time)
+
+    output_directory = os.path.join(output_directory, "visibility_plots")
+    os.makedirs(output_directory, exist_ok=True)
+
+    if save_tables:
+        r_exo = requests.get(exoplanet_file, allow_redirects=True)
+        r_toi = requests.get(toi_file, allow_redirects=True)
+
+        exoplanet_file = os.path.join(output_directory, "exoplanets.csv")
+        toi_file = os.path.join(output_directory, "tois.csv")
+
+        with open(exoplanet_file, "wb") as file:
+            file.write(r_exo.content)
+
+        with open(toi_file, "wb") as file:
+            file.write(r_toi.content)
+
     exop_df = pd.read_csv(exoplanet_file, delimiter=",")
     toi_df = pd.read_csv(toi_file, delimiter=",")
 
@@ -30,18 +54,15 @@ def filter_transit_observations(exoplanet_file="", toi_file="", local_delta=10,
     big_df = big_df[big_df['percent_baseline_observable'] >= cov_threshold]
 
     # filter by TESS magnitude <= mag_threshold
-    big_df = big_df[big_df['V'] <= mag_threshold]
+    big_df = big_df[big_df['V'] <= max_magnitude]
 
     # filter by transit depth >= depth_threshold
-    big_df = big_df[big_df['depth(ppt)'] >= depth_threshold]
+    big_df = big_df[big_df['depth(ppt)'] >= min_transit_depth]
 
     # Group transits by date
     big_df['new_start_date'] = pd.to_datetime(big_df['start time']).dt.date
     transit_groups = big_df.sort_values(by='percent_baseline_observable',
                                         ascending=False).groupby("new_start_date")
-
-    output_directory = os.path.join(os.path.dirname(exoplanet_file), "visibility_plots")
-    os.makedirs(output_directory, exist_ok=True)
 
     dates = []
     for date, name in transit_groups:
@@ -91,8 +112,21 @@ def filter_transit_observations(exoplanet_file="", toi_file="", local_delta=10,
                 with suppress(ValueError):
                     ra, dec = coord.rsplit()
 
-                    comparison_1 = ra[0:-3]
-                    comparison_2 = dec[0:-3]
+                    if len(ra) == 11 and "-" not in ra:
+                        comparison_1 = ra[:-4]
+                    if len(ra) == 12 and "-" in ra:
+                        comparison_1 = ra[:-4]
+                    if len(ra) == 10 and "-" not in ra:
+                        comparison_1 = ra[:-3]
+
+                    if len(dec) == 11 and "-" not in dec:
+                        comparison_2 = dec[:-4]
+                    if len(dec) == 11 and "-" in dec:
+                        comparison_2 = dec[:-3]
+                    if len(dec) == 12 and "-" in dec:
+                        comparison_2 = dec[:-4]
+                    if len(dec) == 10 and "-" not in dec:
+                        comparison_2 = dec[:-3]
 
                     if (comparison_1, comparison_2) not in comparison_coords:
                         comparison_coords.append((comparison_1, comparison_2))
