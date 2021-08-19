@@ -20,33 +20,90 @@ from transyto.targets.swarthmore import configure_transit_finder
 from transyto.utils import set_xaxis_limits
 
 
-def filter_transit_observations(local_delta=10, cov_threshold=80, max_magnitude=11,
-                                min_transit_depth=5, days_to_print=5, time="UTC",
-                                save_tables=False, output_directory=""):
+def filter_transit_observations(local_delta=10, cov_threshold=80, days_to_print=5, days_in_past=0,
+                                save_tables=False, output_directory="", start_date="today",
+                                min_start_elevation=30, elevation_conector="or",
+                                min_end_elevation=30, min_transit_depth=5, max_magnitude=11,
+                                observatory="Siding"):
+    """Filter and plot transits for a given observatory using different criteria (see below).
 
-    exoplanet_file = configure_transit_finder(database="exoplanets", table_type="CSV",
-                                              days_to_print=days_to_print, time=time)
-    toi_file = configure_transit_finder(database="tois", table_type="CSV",
-                                        days_to_print=days_to_print, time=time)
+    Parameters
+    ----------
+    local_delta : int, optional (default is 10)
+        Delta time to calculate the local time from UTC. Ex: Sydney UTC + 10
+    cov_threshold : int, optional (default is 80)
+        Minimum transit coverage to show transits.
+    days_to_print : int, optional (default is 5)
+        Number of days from provided date to show transits.
+    days_in_past : str, optional (default is 0)
+        Number of days to the past of provided date.
+    save_tables : bool, optional (defaul is False)
+        Flag to save both the table of exoplanets and TESS candidates (Tois).
+    output_directory : str, optional (Default current directory)
+        Ouput directory to save tables and plots.
+    start_date : str, optional  (default is "today")
+        Starting date to look for transits. Either "today" or "mm-dd-yyyy" (ex. "08-20-2021")
+    min_start_elevation : int, optional (default is 30)
+        Minimum elevation at start of transit to look for transits.
+    elevation_conector : str, optional (default is "or")
+        Conditional for minimum and maximum elevation. It can be "or" and "and"
+    min_end_elevation : int, optional (default is 30)
+        Minimum elevation at end of transit to look for transits.
+    min_transit_depth : int, optional (default is 5)
+        Minimum transit depth to filter transits.
+    max_magnitude : int, optional (default is 11)
+        Maximum stellar magnitude to filter transits.
+    observatory : str, optional (default is "Siding")
+        String pattern to look for observatory.
 
-    output_directory = os.path.join(output_directory, "visibility_plots")
+    """
+
+    # Configure the transit finder webpage (swarthmore) to get the transits of exoplaneta and
+    # tois rom CSV tables.
+    planets_file = configure_transit_finder(days_to_print=days_to_print,
+                                            days_in_past=days_in_past, start_date=start_date,
+                                            min_start_elevation=min_start_elevation,
+                                            elevation_conector=elevation_conector,
+                                            min_end_elevation=min_end_elevation,
+                                            min_transit_depth=min_transit_depth,
+                                            max_magnitude=max_magnitude,
+                                            observatory=observatory, database="exoplanets", )
+
+    tois_file = configure_transit_finder(days_to_print=days_to_print,
+                                         days_in_past=days_in_past, start_date=start_date,
+                                         min_start_elevation=min_start_elevation,
+                                         elevation_conector=elevation_conector,
+                                         min_end_elevation=min_end_elevation,
+                                         min_transit_depth=min_transit_depth,
+                                         max_magnitude=max_magnitude,
+                                         observatory=observatory, database="tois")
+
+    # Check if output directory was provided and if not then ask for path.
+    if output_directory:
+        output_directory = os.path.join(output_directory, "visibility_plots")
+
+    else:
+        output_directory = input("Enter the output directory: ")
+        output_directory = os.path.join(output_directory, "Visibility_plots")
+
+    # Create the output directory for tables and plots.
     os.makedirs(output_directory, exist_ok=True)
 
     if save_tables:
-        r_exo = requests.get(exoplanet_file, allow_redirects=True)
-        r_toi = requests.get(toi_file, allow_redirects=True)
+        r_exo = requests.get(planets_file, allow_redirects=True)
+        r_toi = requests.get(tois_file, allow_redirects=True)
 
-        exoplanet_file = os.path.join(output_directory, "exoplanets.csv")
-        toi_file = os.path.join(output_directory, "tois.csv")
+        planets_file = os.path.join(output_directory, "exoplanets.csv")
+        tois_file = os.path.join(output_directory, "tois.csv")
 
-        with open(exoplanet_file, "wb") as file:
+        with open(planets_file, "wb") as file:
             file.write(r_exo.content)
 
-        with open(toi_file, "wb") as file:
+        with open(tois_file, "wb") as file:
             file.write(r_toi.content)
 
-    exop_df = pd.read_csv(exoplanet_file, delimiter=",")
-    toi_df = pd.read_csv(toi_file, delimiter=",")
+    exop_df = pd.read_csv(planets_file, delimiter=",")
+    toi_df = pd.read_csv(tois_file, delimiter=",")
 
     big_df = pd.concat([exop_df, toi_df], ignore_index=True, sort=False)
 

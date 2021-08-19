@@ -72,11 +72,11 @@ class TimeSeriesAnalysis:
 
         Parameters
         ----------
-        star_id : string
+        star_id : str
             Name of target star to do aperture photometry
-        data_directory : string
+        data_directory : str
             Top level path of .fits files to search for stars.
-        search_pattern : string
+        search_pattern : str
             Pattern for searching files
         list_reference_stars : list
             Reference stars to be used in aperture photometry.
@@ -434,7 +434,7 @@ class TimeSeriesAnalysis:
 
         Parameters
         ----------
-        star_id: string
+        star_id: str
             Name of star to do the cutout.
         x : float
             x-position of centroid.
@@ -442,7 +442,7 @@ class TimeSeriesAnalysis:
             y-position of centroid.
         cutout : array
             Cutout of the image.
-        filename : string
+        filename : str
             Name of file.
         """
 
@@ -596,11 +596,11 @@ class TimeSeriesAnalysis:
 
         Parameters
         ----------
-        star_id: string
+        star_id: str
             Name of star to be localized in each file
         data_directory: list
             List of files (frames) where we want to get the counts
-        search_pattern: string
+        search_pattern: str
             Pattern to search files
 
         Returns
@@ -981,11 +981,11 @@ class LightCurve(TimeSeriesAnalysis):
             Times of the observation
         flux : array
             Flux with trend to be removed
-        R_star : float
+        R_star : float, optional (defaul is None)
             Radius of the star (in solar units)
-        M_star : float
+        M_star : float, optional (defaul is None)
             Mass of the star (in solar units)
-        Porb : float, optional
+        Porb : float, optional (defaul is None)
             Orbital period of the planet (in days).
 
         Returns
@@ -1028,7 +1028,7 @@ class LightCurve(TimeSeriesAnalysis):
 
         Returns
         -------
-        binned data: numpy array
+        numpy array
             Data in bins
 
         """
@@ -1078,16 +1078,16 @@ class LightCurve(TimeSeriesAnalysis):
             List of target flux
         flux_uncertainty : list or array
             List of data errors
-        bins : int, optional
-            Description
-        detrend : boolean, optional (default is False)
+        bins : int, optional (default is 30)
+            Number of bins to bin the data.
+        detrend : bool, optional (default is False)
             If True, detrending of the time series data will be performed
-        plot_tracking : boolean, optional
+        plot_tracking : bool, optional (default is False)
             Flag to plot the (x, y) position of target (i.e. tracking) of all
             the observation frames.
-        plot_noise_sources : boolean, optional
+        plot_noise_sources : bool, optional (default is False)
             Flag to plot the noise sources throughout the night.
-        model_transit : boolean, optional
+        model_transit : bool, optional (default is False)
             Flag for using transit least squares to model transits.
 
         No Longer Returned
