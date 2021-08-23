@@ -2,6 +2,7 @@ import mechanicalsoup
 
 from urllib.request import urlopen
 from bs4 import BeautifulSoup
+from collections import namedtuple
 
 
 def show_html(url):
@@ -46,8 +47,7 @@ def find_input(url, verbose=False):
         i += 1
 
 
-def find_observatory(url="https://astro.swarthmore.edu/transits/transits.cgi",
-                     observatory="Siding", verbose=False):
+def find_observatory(observatory="", url="https://astro.swarthmore.edu/transits/transits.cgi"):
     """Look for available observatories
 
     Parameters
@@ -71,31 +71,38 @@ def find_observatory(url="https://astro.swarthmore.edu/transits/transits.cgi",
     observatories = []
 
     for result in search:
-        if verbose:
-            print(result, '\n')
-            input_value = result.get('value')
-            print(input_value, '\n')
-        observatories.append(result["value"])
+        obs = result["value"].split(";")[-1]
+        obs = obs.split(",")[0]
+
+        if len(observatories) <= 71:
+            observatories.append(obs)
+
+    if not observatory:
+        for j, obs in enumerate(observatories):
+            print(f"{j} {obs}\n")
+
+        observatory = input("Observatory not provided. Select one from the previous list: ")
 
     for i, obs in enumerate(observatories):
         if observatory in obs:
-            return i
+            outputs = namedtuple("outputs", "idx name")
+            return outputs(i, obs)
         else:
             continue
 
 
 def configure_transit_finder(url="https://astro.swarthmore.edu/transits/transits.cgi",
-                             database="exoplanets", start_date="today", days_to_print=1,
+                             database="exoplanets", starting_date="today", days_to_print=1,
                              days_in_past=0, min_start_elevation=30, elevation_conector="or",
                              min_end_elevation=30, min_transit_depth=5, max_magnitude=11,
-                             observatory="Siding"):
+                             observatory=""):
     """Configure swarthmore webpage to look for transits.
 
     Parameters
     ----------
     url : str, optional (default is Swarthmore webpage)
         Swarthmore webpage to look for transits.
-    start_date : str, optional  (default is "today")
+    starting_date : str, optional  (default is "today")
         Starting date to look for transits. Either "today" or "mm-dd-yyyy" (ex. "08-20-2021")
     days_to_print : int, optional (default is 5)
         Number of days from provided date to show transits.
@@ -130,8 +137,8 @@ def configure_transit_finder(url="https://astro.swarthmore.edu/transits/transits
     form = load_html.select("form")[0]
 
     # Select observatory
-    observatory = find_observatory(url, observatory=observatory)
-    form.select("option")[observatory]["selected"] = "selected"
+    observatory = find_observatory(observatory=observatory)
+    form.select("option")[observatory.idx]["selected"] = "selected"
 
     # Target List
     db_flag = 0
@@ -143,7 +150,7 @@ def configure_transit_finder(url="https://astro.swarthmore.edu/transits/transits
     form.select("input")[11]["value"] = 1
 
     # Start date
-    form.select("input")[14]["value"] = start_date  # It can be ex. "mm-dd-yyyy"
+    form.select("input")[14]["value"] = starting_date  # It can be ex. "mm-dd-yyyy"
 
     # Days to print
     form.select("input")[15]["value"] = days_to_print
