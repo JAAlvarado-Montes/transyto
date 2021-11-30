@@ -1,9 +1,8 @@
-ARG base_image=gcr.io/panoptes-exp/panoptes-plate-solver
+ARG base_image=gcr.io/transyto
 FROM ${base_image}
 
 ENV PATH="/root/miniconda3/bin:${PATH}"
-ENV HUNTSMAN_LOG_DIR=/home/huntsman-logs
-ENV HUNTSMAN_DRP=/home/huntsman-drp
+ENV TRANSYTO=/home/transyto
 
 USER root
 # update apt-get
@@ -26,18 +25,13 @@ RUN apt-get update -y && \
     pip install coverage==4.5.4 && \
     # Make huntsman directories
     mkdir -p "${HUNTSMAN_LOG_DIR}" && \
-    # Install astro_metadata_translator from source && \
-    cd /home && \
-    git clone https://github.com/lsst/astro_metadata_translator.git && \
-    cd astro_metadata_translator && \
-    pip install -e .
 
 # Make sure conda env is used by default for remaining RUN commands
 SHELL ["conda", "run", "/bin/bash", "-c"]
 
-# Install local huntsman-drp into the image
-COPY . ${HUNTSMAN_DRP}
-RUN cd ${HUNTSMAN_DRP} && python setup.py develop
+# Install local transyto into the image
+COPY . ${TRANSYTO}
+RUN cd ${TRANSYTO} && python setup.py develop
 
 WORKDIR /home
 CMD ["/bin/bash"]
