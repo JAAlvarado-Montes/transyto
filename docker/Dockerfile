@@ -25,6 +25,7 @@ RUN apt-get update -y && \
     pip install coverage==4.5.4 && \
     # Make huntsman directories
     mkdir -p "${TRANSYTO}" && \
+    cd /home
 
 # Make sure conda env is used by default for remaining RUN commands
 SHELL ["conda", "run", "/bin/bash", "-c"]
