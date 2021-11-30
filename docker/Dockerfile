@@ -1,4 +1,4 @@
-ARG base_image=gcr.io/transyto
+ARG base_image=gcr.io/transyto-image
 FROM ${base_image}
 
 ENV PATH="/root/miniconda3/bin:${PATH}"
@@ -24,7 +24,7 @@ RUN apt-get update -y && \
     pip uninstall -y coverage && \
     pip install coverage==4.5.4 && \
     # Make huntsman directories
-    mkdir -p "${HUNTSMAN_LOG_DIR}" && \
+    mkdir -p "${TRANSYTO}" && \
 
 # Make sure conda env is used by default for remaining RUN commands
 SHELL ["conda", "run", "/bin/bash", "-c"]
