@@ -1,5 +1,4 @@
-ARG base_image=gcr.io/transyto-image
-FROM ${base_image}
+FROM ubuntu:18.04
 
 ENV PATH="/root/miniconda3/bin:${PATH}"
 ENV TRANSYTO=/home/transyto
