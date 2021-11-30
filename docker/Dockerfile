@@ -27,7 +27,7 @@ RUN apt-get update -y && \
     cd /home
 
 # Make sure conda env is used by default for remaining RUN commands
-SHELL ["conda", "run", "/bin/bash", "-c", "&&"]
+SHELL ["conda", "run", "/bin/bash", "-c"]
 
 # Install local transyto into the image
 COPY . ${TRANSYTO}
