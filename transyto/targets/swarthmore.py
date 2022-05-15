@@ -147,37 +147,37 @@ def configure_transit_finder(url="https://astro.swarthmore.edu/transits/transits
     form.select("input")[0]["value"] = db_flag
 
     # Use UTC [1]
-    form.select("input")[11]["value"] = 1
+    form.select("input")[12]["value"] = 1
 
     # Start date
-    form.select("input")[14]["value"] = starting_date  # It can be ex. "mm-dd-yyyy"
+    form.select("input")[15]["value"] = starting_date  # It can be ex. "mm-dd-yyyy"
 
     # Days to print
-    form.select("input")[15]["value"] = days_to_print
+    form.select("input")[16]["value"] = days_to_print
 
     # Days in past
-    form.select("input")[16]["value"] = days_in_past
+    form.select("input")[17]["value"] = days_in_past
 
     # Minimum start elevation
-    form.select("input")[17]["value"] = min_start_elevation
+    form.select("input")[18]["value"] = min_start_elevation
 
     # And/or
     form.select("input")[19]["value"] = elevation_conector
 
     # Minimum end elevation
-    form.select("input")[20]["value"] = min_end_elevation
+    form.select("input")[21]["value"] = min_end_elevation
 
     # Minimum Depth
-    form.select("input")[27]["value"] = min_transit_depth
+    form.select("input")[28]["value"] = min_transit_depth
 
     # Maximum Magnitude
-    form.select("input")[28]["value"] = max_magnitude
+    form.select("input")[29]["value"] = max_magnitude
 
     # CSV table
-    form.select("input")[31]["value"] = 2
+    form.select("input")[32]["value"] = 2
 
     # Click Submit
-    form.select("input")[35]["value"] = "Submit"
+    form.select("input")[36]["value"] = "Submit"
 
     charge_page = browser.submit(form, page.url)
 

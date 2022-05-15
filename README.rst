@@ -56,4 +56,4 @@ Please read the citation instructions at `https:// <https://>`_.
 Contact
 -------
 Tránsyto is an open source community project created by `the authors <AUTHORS.rst>`_.
-The best way to contact us is to `open an issue <https://github.com/JAAlvarado-Montes/transito/issues/new>`_ or to e-mail  jaime-andres.alvarado-montes@hdr.mq.edu.au.
+The best way to contact us is to `open an issue <https://github.com/JAAlvarado-Montes/transyto/issues/new>`_ or to e-mail  jaime-andres.alvarado-montes@hdr.mq.edu.au.

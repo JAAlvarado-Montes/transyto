@@ -129,7 +129,7 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
     big_df = big_df[big_df['depth(ppt)'] >= min_transit_depth]
 
     # Group transits by date.
-    big_df['new_start_date'] = pd.to_datetime(big_df['start time']) - pd.Timedelta(1.3, unit="h")
+    big_df['new_start_date'] = pd.to_datetime(big_df['start time']) - pd.Timedelta(0.2, unit="h")
     big_df['new_start_date'] = big_df['new_start_date'].dt.date
 
     big_df['new_end_date'] = pd.to_datetime(big_df['end time']).dt.date
@@ -197,6 +197,9 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
         # Empty list to be filled with the name of good observable transits.
         good_transits = []
 
+        # Calculate the time for midnight.
+        midnight = observatory.midnight(Time(f"{date} 23:59:59", scale="utc", format="iso"), which="nearest")
+
         for (start_date, end_date, start_time, end_time, name, coord,
                 perc, depth, duration, period, mag, toi) in zip(start_dates, end_dates, start_times,
                                                                 end_times, target_names, coords,
@@ -207,8 +210,8 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
 
             # Select only the targets whose start and end observation time are in between evening
             # and morning nautical twilight.
-            if (obs_time.jd >= observatory.twilight_evening_nautical(observatory.midnight(obs_time), which="previous").to_value(format="jd") - 0.2
-                    and end_time.jd <= observatory.twilight_morning_nautical(observatory.midnight(obs_time), which="next").to_value(format="jd") + 0.2):
+            if (obs_time.jd >= observatory.twilight_evening_nautical(midnight, which="previous").to_value(format="jd") - 0.2
+                    and end_time.jd <= observatory.twilight_morning_nautical(midnight, which="next").to_value(format="jd") + 0.2):
 
                 with suppress(ValueError):
                     ra, dec = coord.rsplit()
@@ -300,7 +303,7 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
             cell.set_text_props(fontproperties=FontProperties(weight='bold'))
 
         # Calculate the time for midnight.
-        midnight = observatory.midnight(obs_time)
+        # midnight = observatory.midnight(obs_time)
 
         # Calculate the time of evening and morning twilight.
         evening_twilight = observatory.twilight_evening_nautical(midnight, which="previous")
@@ -420,7 +423,7 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
         fig_label = f"{starting_date}"
         if i != 0:
             fig_label = f"{starting_date}+{i}day"
-        fig_name = os.path.join(output_directory, f"filtered_{fig_label}.png")
+        fig_name = os.path.join(output_directory, f"filtered_{date}.png")
         fig.savefig(fig_name, facecolor="w", dpi=300)
         plt.close(fig)
 
