@@ -10,10 +10,10 @@ jobs:
     -
       uses: actions/checkout@master
     -
-      name: Build and push jaimeandres/transyto:develop image
+      name: Build and push jaimeandres/transyto-image:develop image
       uses: elgohr/Publish-Docker-Github-Action@master
       with:
-        name: jaimeandres/transyto:develop
+        name: jaimeandres/transyto-image:develop
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
-        dockerfile: docker/ingestor/Dockerfile
+        dockerfile: docker/Dockerfile
