@@ -28,8 +28,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -U flake8 pytest wheel numpy
-        if [ -f requirements.txt ]; then pip install -r -U requirements.txt; fi
+        pip install flake8 pytest wheel numpy --upgrade
+        if [ -f requirements.txt ]; then pip install -r --upgrade requirements.txt; fi
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors
