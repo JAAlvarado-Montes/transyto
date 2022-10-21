@@ -5,7 +5,7 @@ from collections import namedtuple
 
 log = logging.getLogger(__name__)
 
-__all__ = []
+__all__ = ['compute_scintillation', 'compute_noises']
 
 
 def compute_scintillation(telescope_aperture, telescope_altitude, airmass, exptime):

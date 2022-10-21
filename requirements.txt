@@ -4,6 +4,7 @@ matplotlib>=1.5.3
 astroquery>=0.3.9
 numpy
 astroplan
+tqdm
 pyfiglet
 argparse
 natsort

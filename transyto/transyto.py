@@ -1,4 +1,6 @@
-"""Defines TimeSeriesData"""
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""Work with time series data"""
 
 from __future__ import division
 import os
@@ -23,6 +25,9 @@ from astropy.nddata import NDData
 from astropy.table import Table
 from astropy.visualization import simple_norm
 from astropy.stats import sigma_clipped_stats
+from astropy.visualization import SqrtStretch
+from astropy.visualization.mpl_normalize import ImageNormalize
+from astropy.modeling import models, fitting
 
 from transitleastsquares import transitleastsquares
 from collections import namedtuple
@@ -34,6 +39,7 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib import dates
 
+from photutils.detection import DAOStarFinder
 from photutils.aperture.circle import CircularAperture, CircularAnnulus
 from photutils import aperture_photometry
 from photutils.centroids import centroid_2dg, centroid_1dg, centroid_com
@@ -65,9 +71,8 @@ class TimeSeriesAnalysis:
     """Photometry Class"""
 
     def __init__(self, target_star="", data_directory="", search_pattern="*fit*",
-                 list_reference_stars=[], aperture_radius=15, from_coordinates=None, ra_target=None,
-                 dec_target=None, transit_times=[], ra_ref_stars=[], dec_ref_stars=[],
-                 telescope=""):
+                 from_coordinates=None, ra_target=None, dec_target=None,
+                 transit_times=[], telescope=""):
         """Initialize class Photometry for a given target and reference stars.
 
         Parameters
@@ -78,10 +83,6 @@ class TimeSeriesAnalysis:
             Top level path of .fits files to search for stars.
         search_pattern : str
             Pattern for searching files
-        list_reference_stars : list
-            Reference stars to be used in aperture photometry.
-        aperture_radius : float
-            Radius of the inner circular perture.
         from_coordinates : None, optional
             Flag to find star by using its coordinates.
         ra_target : None, optional
@@ -91,45 +92,35 @@ class TimeSeriesAnalysis:
         transit_times : list, optional
             Ingress, mid-transit, and egress time. In "isot" format.
             Example: ["2021-07-27T15:42:00", "2021-07-27T17:06:00", "2021-07-27T18:29:00"]
-        ra_ref_stars : list, optional
-            RA of ref stars.
-        dec_ref_stars : list, optional
-            DEC f ref. stars.
         telescope : str, optional
             Name of the telescope where the data come from.
         """
 
-        # Positional Arguments
+        # Name of target star and number of reference stars to be used.
         self.target_star = target_star
 
-        # Data directory.
+        # Data directory and search pattern for files.
         self._data_directory = data_directory
+        self._search_pattern = search_pattern
+
+        # List of files to be used by transyto to perform differential photometry.
+        self.fits_files = search_files_across_directories(self._data_directory,
+                                                          self._search_pattern)
 
         # Output directory for light curves
         if self._data_directory:
             self._output_directory = data_directory + "Light_Curve_Analysis"
             os.makedirs(self._output_directory, exist_ok=True)
 
-        self.search_pattern = search_pattern
-        self.list_reference_stars = list_reference_stars
+        # Name of the telescope with which data was collected.
         self.telescope = telescope
-
-        # Aperture parameters
-        self.r = aperture_radius
-        self.r_in = aperture_radius * 1.7
-        self.r_out = aperture_radius * 2.3
 
         # RADEC of target and ref. stars if needed.
         self.ra_target = ra_target
         self.dec_target = dec_target
-        self.ra_ref_stars = ra_ref_stars
-        self.dec_ref_stars = dec_ref_stars
 
         # Transit times of target star: ingress, mid-transit, and egress time.
         self.transit_times = transit_times
-
-        # Centroid bow width for centroid function.
-        self._box_width = self.r_out + 0.5
 
         # Set possible positive answers to set some variables below.
         pos_answers = ['True', 'true', 'yes', 'y', 'Yes', True]
@@ -153,8 +144,12 @@ class TimeSeriesAnalysis:
             self.logger.info(pyfiglet.figlet_format(f"-*- {self.pipeline} -*-"))
 
     @classmethod
-    def get_class_name(cls):
+    def __get_class_name(cls):
         return cls.__name__
+
+    @classmethod
+    def __getattr__(self, name):
+        return f'{self.__get_class_name()} does not have "{str(name)}" attribute.'
 
     @property
     def pipeline(self):
@@ -164,7 +159,7 @@ class TimeSeriesAnalysis:
     def readout(self):
 
         # if self.telescope == "Huntsman":
-        #     return -0.070967 * self.gain**2 + 0.652094 * self.gain + 1.564342
+        #     return -0.070967 * self.detector_gain**2 + 0.652094 * self.detector_gain + 1.564342
         # else:
         return self.get_keyword_value().readout
 
@@ -193,7 +188,7 @@ class TimeSeriesAnalysis:
         return self.get_keyword_value().longitude
 
     @property
-    def gain(self):
+    def detector_gain(self):
         return self.get_keyword_value().gain
 
     @property
@@ -281,7 +276,173 @@ class TimeSeriesAnalysis:
         x, y = centroid_com(data, mask=mask)
         return x, y
 
-    def find_centroid(self, prior_centroid, data, mask, method="2dgaussian"):
+    # Using the 'def' function to define the Gaussian Equation
+    def Gauss(x, A, B, mi, sig):
+        y = A * np.exp(-1 * B * (x - mi)**2 / (2 * sig**2))
+        return y
+
+    def _find_ref_stars_coordinates(self):
+        """Get all data from plate-solved images (right ascention,
+           declination, airmass, dates, etc). Then, it converts the
+           right ascention and declination into image positions to
+           call make_aperture and find its total counts.
+
+        """
+        if self._from_coordinates:
+            star = SkyCoord(self.ra_target, self.dec_target, unit='deg', frame='icrs')
+        else:
+            star = SkyCoord.from_name(self.target_star)
+
+        # Get data, header, and WCS of first frame (fits file)
+        fn = self.fits_files[0]
+        data = get_data(fn)
+        header = get_header(fn)
+        wcs = WCS(header)
+        # Check if WCS exist in image
+        if wcs.is_celestial:
+
+            # Star pixel positions in the image
+            center_yx = wcs.all_world2pix(star.ra, star.dec, 0)
+
+            cutout = self._slice_data(data, center_yx, self._box_width)
+            masked_cutout = self._mask_data(cutout)
+
+            x_cen, y_cen = self._find_centroid(center_yx, cutout, masked_cutout.mask,
+                                               method="2dgaussian")
+
+            target_mask = np.zeros(data.shape, dtype=bool)
+            target_mask[np.int(x_cen - self._box_width / 2.):np.int(x_cen + self._box_width / 2.),
+                        np.int(y_cen - self._box_width / 2.):np.int(y_cen + self._box_width / 2.)] = True
+
+            # We clipped and clean the background to leave the stars only
+            mean, median, std = sigma_clipped_stats(data, sigma=10.0)
+            daofind = DAOStarFinder(fwhm=3.0, threshold=10 * std)
+            target = daofind(data - median, mask=~target_mask)
+            target_magnitude = target['mag'][0]
+            for col in target.colnames:
+                target[col].info.format = '%.8g'  # for consistent table output
+
+            ref_stars = daofind(data - median, mask=target_mask)
+            for col in ref_stars.colnames:
+                ref_stars[col].info.format = '%.8g'  # for consistent table output
+
+            # Now we filter the reference stars that have similar magnitude to the target
+            ref_stars = ref_stars.to_pandas()
+            ref_stars['resid'] = ref_stars['mag'].sub(target_magnitude).abs()
+            filtered_ref_stars = ref_stars.loc[ref_stars['resid'] <= 0.1]
+
+            self.logger.info(filtered_ref_stars)
+
+            target_star_position = np.transpose((target['xcentroid'], target['ycentroid']))
+
+            ref_stars_positions = np.transpose((filtered_ref_stars['xcentroid'],
+                                                filtered_ref_stars['ycentroid']))
+
+            # Use only the requested number of reference stars.
+            if len(ref_stars_positions) == 0:
+                print(f"{8 * '-'}>\t{self.pipeline} did not found any suitable reference stars")
+
+            elif len(ref_stars_positions) == 1:
+                print(f"{8 * '-'}>\t{self.pipeline} found a single suitable reference star...")
+
+            else:
+                print(f"{8 * '-'}>\t{self.pipeline} found {len(ref_stars_positions)} suitable reference stars...")
+
+            # Use (x, y) positions to create lists of ras and decs for the chosen reference stars.
+            ref_stars_ra_list = list()
+            ref_stars_dec_list = list()
+            for ref_star_pos in ref_stars_positions:
+                rx, ry = ref_star_pos
+                sky = wcs.pixel_to_world(rx, ry).to_string('hmsdms')
+                sky = sky.split(' ')
+                ref_stars_ra_list.append(sky[0])
+                ref_stars_dec_list.append(sky[1])
+
+            self.ref_stars_coordinates_list = pd.DataFrame([ref_stars_ra_list, ref_stars_dec_list])
+            self.ref_stars_coordinates_list = self.ref_stars_coordinates_list.transpose()
+            self.ref_stars_coordinates_list.columns = ['RA', 'DEC']
+            self.ref_stars_coordinates_list.index += 1
+
+            print(self.ref_stars_coordinates_list)
+
+            time.sleep(2)
+
+            # Add subplot for fitted psf star
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+
+            ref_apertures = CircularAperture(ref_stars_positions, r=4.)
+            target_aperture = CircularAperture(target_star_position, r=4.)
+            norm = ImageNormalize(stretch=SqrtStretch())
+            ax.imshow(data, cmap='Greys', origin='lower',
+                      norm=norm, interpolation='nearest')
+            target_patches = target_aperture.plot(color='red', lw=1.5, alpha=0.5,
+                                                  label=f'Target: {self.target_star}')
+            ref_patches = ref_apertures.plot(color='blue', lw=1.5, alpha=0.5,
+                                             label="Reference stars")
+
+            handles = (target_patches[0], ref_patches[0])
+
+            plt.legend(ncol=2, loc="upper center", fontsize=8.4,
+                       bbox_to_anchor=(0.5, 1.1), fancybox=True, frameon=True, handles=handles)
+
+            # Get the (x, y) coordinates of each reference star to visually check them.
+            for i, xy_pos in enumerate(ref_stars_positions):
+                ax.annotate(f"{i + 1}", xy_pos)
+
+            plt.show()
+
+            # Ask if users want to remove any reference star (variable, high proper motion, etc.)
+            removal_flag = input(f"{8 * '-'}>\tWould you like to remove any reference star (yes/no)? ")
+
+            # Create the indexes list for the reference stars to be removed (if any).
+            if removal_flag == "yes":
+                removable_indexes = [int(index) for index in
+                                     input(f"{8 * ' '}\tReference star(s) to be removed: ").split()]
+                self.ref_stars_coordinates_list = self.ref_stars_coordinates_list.\
+                    drop(labels=removable_indexes)
+            # If no reference star will be removed, then continue with the remaining processing.
+            else:
+                pass
+
+            # Remove (x, y) positions of any reference star removed, to plot only the ones selected.
+            new_ref_stars_positions = list()
+            for i in range(len(ref_stars_positions)):
+                if i in (np.array(removable_indexes) - 1):
+                    continue
+                else:
+                    new_ref_stars_positions.append(ref_stars_positions[i])
+            new_ref_stars_positions = np.array(new_ref_stars_positions)
+
+            # Add subplot for fitted psf star
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+
+            # Plot the target and reference stars in the field just as a reference.
+            phot_stars_name = os.path.join(self._output_directory, "photometry_stars.png")
+
+            ref_apertures = CircularAperture(new_ref_stars_positions, r=4.)
+            target_aperture = CircularAperture(target_star_position, r=4.)
+            norm = ImageNormalize(stretch=SqrtStretch())
+            ax.imshow(data, cmap='Greys', origin='lower',
+                      norm=norm, interpolation='nearest')
+            target_patches = target_aperture.plot(color='red', lw=1.5, alpha=0.5,
+                                                  label=f'Target: {self.target_star}')
+            ref_patches = ref_apertures.plot(color='blue', lw=1.5, alpha=0.5,
+                                             label="Reference stars")
+
+            handles = (target_patches[0], ref_patches[0])
+
+            plt.legend(ncol=2, loc="upper center", fontsize=8.4, bbox_to_anchor=(0.5, 1.1),
+                       fancybox=True, frameon=True, handles=handles, prop={'weight': 'bold'})
+            plt.grid(alpha=0.4)
+            ax.set_xlabel('X pixels', fontsize=9)
+            ax.set_ylabel('Y pixels', fontsize=9)
+            fig.savefig(phot_stars_name, dpi=300)
+        else:
+            print(f"{16 * ' '}• Not possible to find reference stars, first frame has no WCS\n")
+
+    def _find_centroid(self, prior_centroid, data, mask, method="2dgaussian"):
 
         prior_y, prior_x = prior_centroid
         with warnings.catch_warnings():
@@ -292,7 +453,6 @@ class TimeSeriesAnalysis:
                 x_cen, y_cen = self._estimate_centroid_via_2dgaussian(data, mask)
             elif method == "1dgaussian":
                 x_cen, y_cen = self._estimate_centroid_via_1dgaussian(data, mask)
-
             elif method == "moments":
                 x_cen, y_cen = self._estimate_centroid_via_moments(data, mask)
 
@@ -318,7 +478,7 @@ class TimeSeriesAnalysis:
 
             return new_x, new_y
 
-    def make_effective_psf(self, nddatas, tables, plot_psf_profile=True):
+    def make_effective_psf(self, nddatas, tables, plot_psf_profile=False):
         # Extract stars from all the frames
         stars = extract_stars(nddatas, tables, size=self.r_out)
 
@@ -383,53 +543,53 @@ class TimeSeriesAnalysis:
 
         fig.savefig(epsf_name, dpi=300)
 
-        if plot_psf_profile:
-            projections_list = list()
-            sl = self.r
-            pr = 5
-            for nd in nddatas:
-                projection_x = nd.data[np.int((x_cen - sl)):np.int(2.3 * (x_cen + sl)),
-                                       np.int(y_cen - pr):np.int(y_cen + pr)]
-                projection_y = nd.data[np.int(x_cen - pr):np.int(x_cen + pr),
-                                       np.int((y_cen - sl)):np.int(2.3 * (y_cen + sl))]
-                projection_x = np.mean(projection_x, axis=1)
-                projection_y = np.mean(projection_y, axis=0)
+        projections_list = list()
+        sl = self.r
+        pr = 5
+        for nd in nddatas:
+            projection_x = nd.data[np.int((x_cen - sl)):np.int(2.3 * (x_cen + sl)),
+                                   np.int(y_cen - pr):np.int(y_cen + pr)]
+            projection_y = nd.data[np.int(x_cen - pr):np.int(x_cen + pr),
+                                   np.int((y_cen - sl)):np.int(2.3 * (y_cen + sl))]
+            projection_x = np.mean(projection_x, axis=1)
+            projection_y = np.mean(projection_y, axis=0)
 
-                projection_average = (projection_x + projection_y) / 2
+            projection_average = (projection_x + projection_y) / 2
 
-                projections_list.append(np.asarray(projection_average))
+            projections_list.append(np.asarray(projection_average))
 
-            # Name of PSF profile image
-            fig_slices_name = os.path.join(output_directory, "{}_{}_profile.png".
-                                           format(self.instrument, self.target_star))
+        # Name of PSF profile image
+        fig_slices_name = os.path.join(output_directory, "{}_{}_profile.png".
+                                       format(self.instrument, self.target_star))
 
-            projection_average = np.sum(projections_list, axis=0) / len(projections_list)
-            psf_half = (np.max(projection_average) + np.min(projection_average)) / 2
-            pixs = np.linspace(-sl, sl, len(projection_average))
+        projection_average = np.sum(projections_list, axis=0) / len(projections_list)
+        psf_half = (np.max(projection_average) + np.min(projection_average)) / 2
+        pixs = np.linspace(-sl, sl, len(projection_average))
 
-            peaks, _ = scipy.signal.find_peaks(projection_average)
-            results_half = scipy.signal.peak_widths(projection_average, peaks, rel_height=0.5)
+        peaks, _ = scipy.signal.find_peaks(projection_average)
+        results_half = scipy.signal.peak_widths(projection_average, peaks, rel_height=0.5)
 
-            idx_n, idx_p = -np.max(results_half[0]) / 4, np.max(results_half[0]) / 4
+        idx_n, idx_p = -np.max(results_half[0]) / 4, np.max(results_half[0]) / 4
 
-            fig = plt.figure(figsize=(6.5, 6.5))
-            ax = fig.add_subplot(111)
-            plt.title(f"PSF profile of {self.target_star} " r"($m_\mathrm{V}=10.0$)", fontsize=15)
-            ax.plot(pixs, projection_average, "k-", ms=3)
-            # ax.axhline(y=psf_half, xmin=0.36, xmax=0.67, c="r", ls="--", lw=1.5)
-            ax.axvline(x=idx_n, c="b", ls="-.", lw=1.5)
-            ax.axvline(x=idx_p, c="b", ls="-.", lw=1.5)
-            ax.axvspan(idx_n, idx_p, facecolor='blue', alpha=0.15)
-            ax.text(idx_p + 0.4, psf_half, rf"FWHM$\approx${np.max(results_half[0]) / 2:.3f} pix",
-                    color="k", fontsize=13)
+        fig = plt.figure(figsize=(6.5, 6.5))
+        ax = fig.add_subplot(111)
+        plt.title(f"PSF profile of {self.target_star} " r"($m_\mathrm{V}=10.0$)", fontsize=15)
+        ax.plot(pixs, projection_average, "k-", ms=3)
+        # ax.axhline(y=psf_half, xmin=0.36, xmax=0.67, c="r", ls="--", lw=1.5)
+        ax.axvline(x=idx_n, c="b", ls="-.", lw=1.5)
+        ax.axvline(x=idx_p, c="b", ls="-.", lw=1.5)
+        ax.axvspan(idx_n, idx_p, facecolor='blue', alpha=0.15)
+        ax.text(idx_p + 0.4, psf_half, rf"FWHM$\approx${np.max(results_half[0]) / 2:.3f} pix",
+                color="k", fontsize=13)
 
-            ax.tick_params(axis="both", which="major", labelsize=15)
-            ax.set_xlabel("Pixels", fontsize=15)
-            ax.set_ylabel("Counts", fontsize=15)
-            ax.grid(alpha=0.5)
-            fig.savefig(fig_slices_name, dpi=300)
+        ax.tick_params(axis="both", which="major", labelsize=15)
+        ax.set_xlabel("Pixels", fontsize=15)
+        ax.set_ylabel("Counts", fontsize=15)
+        ax.grid(alpha=0.5)
+        fig.savefig(fig_slices_name, dpi=300)
 
-    def save_star_cutout(self, star_id, x, y, cutout, filename):
+    def save_star_cutout(self, star_id="", x=None, y=None,
+                         cutout=None, num_frame=None, filename=""):
         """Save cutouts of a given star
 
         Parameters
@@ -460,45 +620,61 @@ class TimeSeriesAnalysis:
 
         # Add subplot for normal star
         instrume = self.header["INSTRUME"]
-        fig, ax = plt.subplots(figsize=(6.5, 6.5))
-        ax.set_title(f"Huntsman Camera {instrume}\n"
-                     f"Star {star_id}", fontsize=15)
+        fig, (ax, ax1) = plt.subplots(1, 2, figsize=(8, 8))
+        fig.suptitle(f"Huntsman Camera {instrume}\n"
+                     f"Star {star_id} (frame {num_frame})", fontsize=15, y=0.93)
+        ax.set_title("Photometry Data\n\n"
+                     r"$r_\mathrm{inner\_aperture}$=1 x FWHM$_\mathrm{mean}$" "\n"
+                     r"$r_\mathrm{inner\_annulus}$="
+                     f"{self.r_in / self.r:.0f} x " r"$r_\mathrm{inner\_aperture}$" "\n"
+                     r"$r_\mathrm{outer\_annulus}$="
+                     f"{self.r_out / self.r:.0f} x " r"$r_\mathrm{inner\_aperture}$")
         norm = simple_norm(cutout, "sqrt", percent=99.7)
-        ax.imshow(cutout, norm=norm, origin="lower", cmap="viridis")
+        norm_box = simple_norm(self.new_cutout, "sqrt", percent=99.7)
+        ax.imshow(cutout, origin="lower", cmap="viridis", norm=norm)
         ax.scatter(x, y, c='k', marker='+', s=100)
 
         # Draw the apertures of object and background
-        r = self.r
-        # r_in = self.r_in
-        # r_out = self.r_out
-        circ = Circle((x, y), r, alpha=0.7, facecolor="none",
+        circ = Circle((x, y), self.r, alpha=0.7, facecolor="none",
                       edgecolor="k", lw=2.0, zorder=3)
-        # circ1 = Circle((x, y), r_in, alpha=0.7, facecolor="none",
-        #                edgecolor="r", ls="--", lw=2.0, zorder=3)
-        # circ2 = Circle((x, y), r_out, alpha=0.7, facecolor="none",
-        #                edgecolor="r", ls="--", lw=2.0, zorder=3)
+        circ1 = Circle((x, y), self.r_in, alpha=0.7, facecolor="none",
+                       edgecolor="r", ls="--", lw=2.0, zorder=3)
+        circ2 = Circle((x, y), self.r_out, alpha=0.7, facecolor="none",
+                       edgecolor="r", ls="--", lw=2.0, zorder=3)
 
-        # n, radii = 50, [r_in, r_out]
-        # theta = np.linspace(0, 2 * np.pi, n, endpoint=True)
-        # xs = np.outer(radii, np.cos(theta))
-        # ys = np.outer(radii, np.sin(theta))
+        n, radii = 50, [self.r_in, self.r_out]
+        theta = np.linspace(0, 2 * np.pi, n, endpoint=True)
+        xs = np.outer(radii, np.cos(theta))
+        ys = np.outer(radii, np.sin(theta))
 
-        # # in order to have a closed area, the circles
-        # # should be traversed in opposite directions
-        # xs[1, :] = xs[1, ::-1]
-        # ys[1, :] = ys[1, ::-1]
+        # in order to have a closed area, the circles
+        # should be traversed in opposite directions
+        xs[1, :] = xs[1, ::-1]
+        ys[1, :] = ys[1, ::-1]
 
-        # ax.fill(np.ravel(xs) + x, np.ravel(ys) + y, facecolor="gray",
-        #         alpha=0.6, zorder=4)
+        ax.fill(np.ravel(xs) + x, np.ravel(ys) + y, facecolor="gray",
+                alpha=0.6, zorder=4)
         ax.tick_params(axis="both", which="major", labelsize=15)
         ax.add_patch(circ)
-        # ax.add_patch(circ1)
-        # ax.add_patch(circ2)
+        ax.add_patch(circ1)
+        ax.add_patch(circ2)
         ax.set_xlabel("X Pixels", fontsize=15)
         ax.set_ylabel("Y Pixels", fontsize=15)
-        ax.set_xlim((0, self._box_width - 1.0))
-        ax.set_ylim((0, self._box_width - 1.0))
+        ax.set_xlim((0, 2.25 * self._box_width))
+        ax.set_ylim((0, 2.25 * self._box_width))
 
+        ax1.set_title(f"PSF Model: 2D Gaussian\n\n"
+                      r"FWHM$_{x}$" f"={self.psf_model_x_fwhm:.2f} pixels" "\n"
+                      r"FWHM$_{y}$" f"={self.psf_model_y_fwhm:.2f} pixels" "\n"
+                      r"FWHM$_\mathrm{mean}$" f"={self.r:.2f} pixels")
+        ax1.imshow(self.psf_model(self.x_model, self.y_model), origin="lower",
+                   cmap="viridis", norm=norm_box)
+        ax1.tick_params(axis="both", which="major", labelsize=15)
+        ax1.yaxis.set_ticks_position('none')
+        ax1.set_xticks([])
+        ax1.set_yticks([])
+
+        fig.tight_layout()
         fig.savefig(fig_cutouts_name)
         plt.close(fig)
 
@@ -587,8 +763,8 @@ class TimeSeriesAnalysis:
                 phot_table)
 
     # @logged
-    def do_photometry(self, star_id, data_directory, search_pattern, ra_star=None, dec_star=None,
-                      make_effective_psf=False, save_cutout=False):
+    def do_photometry(self, star_id, ra_star=None, dec_star=None,
+                      make_effective_psf=False):
         """Get all data from plate-solved images (right ascention,
            declination, airmass, dates, etc). Then, it converts the
            right ascention and declination into image positions to
@@ -598,10 +774,6 @@ class TimeSeriesAnalysis:
         ----------
         star_id: str
             Name of star to be localized in each file
-        data_directory: list
-            List of files (frames) where we want to get the counts
-        search_pattern: str
-            Pattern to search files
 
         Returns
         --------
@@ -612,9 +784,6 @@ class TimeSeriesAnalysis:
             star = SkyCoord(ra_star, dec_star, unit='deg', frame='icrs')
         else:
             star = SkyCoord.from_name(star_id)
-
-        # Search for files containing data to analyze
-        fits_files = search_files_across_directories(data_directory, search_pattern)
 
         # List of ADU counts for the source, background
         object_counts = list()
@@ -640,33 +809,69 @@ class TimeSeriesAnalysis:
         # projections_list = list()
 
         fmt = "{desc}{percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} frames | {elapsed}<{remaining}"
-        for fn in tqdm(fits_files, desc=f"{18 * ' ' }Progress: ", bar_format=fmt):
+        for fn in tqdm(self.fits_files, desc=f"{18 * ' ' }Progress: ", bar_format=fmt):
             # Get data, header and WCS of fits files with any extension
             data = get_data(fn)
             self.header = get_header(fn)
+
+            # Centroid box width for initial centroid function.
+            self._box_width = 30.
 
             wcs = WCS(self.header)
             # Check if WCS exist in image
             if wcs.is_celestial:
 
-                # Star pixel positions in the image
+                # Get the initial  (x, y) positions of the target star in the image.
                 center_yx = wcs.all_world2pix(star.ra, star.dec, 0)
 
-                cutout = self._slice_data(data, center_yx, self._box_width)
+                # Do a first cutout to refine the centroid of the target star.
+                first_cutout = self._slice_data(data, center_yx, self._box_width)
 
-                masked_data = self._mask_data(cutout)
+                # Mask those pixels in the first cutout which are mainly sky background.
+                masked_data = self._mask_data(first_cutout)
 
-                x_cen, y_cen = self.find_centroid(center_yx, cutout, masked_data.mask,
-                                                  method="2dgaussian")
+                # Calculate the centroid of the star and return (x, y) in original data coordinates.
+                x_cen, y_cen = self._find_centroid(center_yx, first_cutout, masked_data.mask,
+                                                   method="2dgaussian")
 
-                # Exposure time
+                # Create a new cutout around the new centroid to model the PSF of the target star.
+                self.new_cutout = self._slice_data(data, (y_cen, x_cen), self._box_width)
+
+                # Get the dimensions of the new cutout.
+                yp, xp = self.new_cutout.shape
+
+                # Generate grid of same size like box to put the fit on
+                self.y_model, self.x_model, = np.mgrid[:yp, :xp]
+
+                # Declare what function you want to fit to your data
+                gaussian_2d = models.Gaussian2D()
+
+                # Declare what fitting function you want to use
+                fit_gauss_2d = fitting.LevMarLSQFitter()
+
+                # Fit the model to your data (new_cutout)
+                self.psf_model = fit_gauss_2d(gaussian_2d, self.x_model,
+                                              self.y_model, self.new_cutout)
+
+                # Get the FWHM in both x and y axes.
+                self.psf_model_x_fwhm = self.psf_model.x_fwhm
+                self.psf_model_y_fwhm = self.psf_model.y_fwhm
+
+                # Calculate the radius of the aperture and the annulus for aperture photometry.
+                self.r = 1. * (self.psf_model_x_fwhm + self.psf_model_y_fwhm) / 2.
+                self.r_in = 3. * self.r
+                self.r_out = 5. * self.r
+                # Redefine the box_width to extract a cutout that can be used as a diagnosis plot.
+                self._box_width = self.r_out + 0.5
+
+                # Get the exposure time and airmass for the current frame.
                 exptimes.append(self.exptime)
                 airmasses.append(self.airmass)
 
-                # Observation times
+                # Get the observation time for the current frame.
                 time = self.obs_time
 
-                # Sum of counts inside aperture
+                # Calculate the sum of counts inside inner aperture and annulus for current frame.
                 (counts_in_aperture,
                     bkg_in_object,
                     phot_table) = self.make_aperture(data, (y_cen, x_cen), radius=self.r,
@@ -681,6 +886,7 @@ class TimeSeriesAnalysis:
                 times.append(time)
                 self.good_frames_list.append(fn)
 
+                # If True, an effective instrumental PSF will be calculated using all the frames.
                 if make_effective_psf:
                     cutout_psf = self._slice_data(data, center_yx, 2. * self.r_out)
                     masked_data = self._mask_data(cutout_psf)
@@ -692,10 +898,25 @@ class TimeSeriesAnalysis:
                     tables.append(positions)
                     nddatas.append(NDData(data=cutout_psf))
 
-                if save_cutout:
-                    x_cen, y_cen = self._estimate_centroid_via_2dgaussian(cutout,
-                                                                          mask=masked_data.mask)
-                    self.save_star_cutout(star_id, x_cen, y_cen, cutout, fn)
+                # Make a bigger cutout to include both apertures: star and local background.
+                cutout = self._slice_data(data, center_yx, 2.3 * self._box_width)
+
+                # Find a rough center of the cutout.
+                mid_point = self._box_width / 2.
+                x_cen, y_cen = 2.3 * mid_point, 2.3 * mid_point
+
+                # Filter and choose the pixels only in the middle region of the cutout.
+                mask = np.zeros(cutout.shape, dtype=bool)
+                mask[np.int(x_cen - mid_point):np.int(x_cen + mid_point),
+                     np.int(y_cen - mid_point):np.int(y_cen + mid_point)] = True
+
+                # Recalculate the centroid for the selected area to improve precision.
+                new_x_cen, new_y_cen = self._estimate_centroid_via_2dgaussian(cutout, mask=~mask)
+                num_frame = self.fits_files.index(fn) + 1
+
+                # Save cutout
+                self.save_star_cutout(star_id=star_id, x=new_x_cen, y=new_y_cen,
+                                      cutout=cutout, num_frame=num_frame, filename=fn)
 
             else:
                 continue
@@ -704,8 +925,163 @@ class TimeSeriesAnalysis:
             print(f"Building effective PSF for target star {self.target_star}")
             self.make_effective_psf(nddatas, tables)
 
-        return (object_counts, background_in_object,
-                exptimes, x_pos, y_pos, times, airmasses)
+        self.exptimes = np.asarray(exptimes)
+        self.airmasses = np.asarray(airmasses)
+
+        return (object_counts, background_in_object, x_pos, y_pos, times)
+
+    # @logged
+    def do_photometry_ref_stars(self, make_effective_psf=False):
+        """Get all data from plate-solved images (right ascention,
+           declination, airmass, dates, etc). Then, it converts the
+           right ascention and declination into image positions to
+           call make_aperture and find its total counts.
+
+        """
+        # Get the flux of each reference star
+        ref_stars_flux_sec = list()
+        ref_stars_background_sec = list()
+
+        ref_stars_ra = self.ref_stars_coordinates_list['RA']
+        ref_stars_dec = self.ref_stars_coordinates_list['DEC']
+
+        for ref_star_ra, ref_star_dec in zip(ref_stars_ra, ref_stars_dec):
+
+            df = self.ref_stars_coordinates_list
+            ref_index = df[df['RA'] == ref_star_ra].index.values[0]
+            self.logger.debug(f"Aperture photometry of reference star {ref_index}\n")
+            print(f"{16 * ' '}• Starting aperture photometry on reference star {ref_index}\n")
+
+            tables = list()
+            nddatas = list()
+
+            star = SkyCoord(ref_star_ra, ref_star_dec, frame='icrs')
+
+            # List of ADU counts for the source, background
+            object_counts = list()
+            background_in_object = list()
+
+            fmt = "{desc}{percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} frames | {elapsed}<{remaining}"
+            for fn in tqdm(self.fits_files, desc=f"{18 * ' ' }Progress: ", bar_format=fmt):
+                # Get data, header and WCS of fits files with any extension
+                data = get_data(fn)
+                self.header = get_header(fn)
+
+                # Centroid box width for initial centroid function.
+                self._box_width = 30.
+
+                wcs = WCS(self.header)
+
+                # Star pixel positions in the image
+                center_yx = wcs.all_world2pix(star.ra, star.dec, 0)
+
+                self.first_cutout = self._slice_data(data, center_yx, self._box_width)
+
+                masked_data = self._mask_data(self.first_cutout)
+
+                x_cen, y_cen = self._find_centroid(center_yx, self.first_cutout, masked_data.mask,
+                                                   method="2dgaussian")
+
+                new_cutout = self._slice_data(data, (y_cen, x_cen), self._box_width)
+
+                yp, xp = new_cutout.shape
+
+                # Generate grid of same size like box to put the fit on
+                self.y_model, self.x_model, = np.mgrid[:yp, :xp]
+                # Declare what function you want to fit to your data
+                gaussian_2d = models.Gaussian2D()
+                # Declare what fitting function you want to use
+                fit_gauss_2d = fitting.LevMarLSQFitter()
+
+                # Fit the model to your data (box)
+                self.psf_model = fit_gauss_2d(gaussian_2d, self.x_model, self.y_model, new_cutout)
+
+                self.psf_model_x_fwhm = self.psf_model.x_fwhm
+                self.psf_model_y_fwhm = self.psf_model.y_fwhm
+
+                self.r = 1. * (self.psf_model_x_fwhm + self.psf_model_y_fwhm) / 2.
+                self.r_in = 3. * self.r
+                self.r_out = 5. * self.r
+                self._box_width = self.r_out + 0.5
+
+                # Sum of counts inside aperture
+                (counts_in_aperture,
+                    bkg_in_object,
+                    phot_table) = self.make_aperture(data, (y_cen, x_cen), radius=self.r,
+                                                     r_in=self.r_in, r_out=self.r_out)
+
+                self.logger.debug(phot_table)
+
+                object_counts.append(counts_in_aperture)
+                background_in_object.append(bkg_in_object)
+
+                if make_effective_psf:
+                    cutout_psf = self._slice_data(data, center_yx, 2. * self.r_out)
+                    masked_data = self._mask_data(cutout_psf)
+                    x, y = self._estimate_centroid_via_2dgaussian(cutout_psf, mask=masked_data.mask)
+                    positions = Table()
+                    positions["x"] = [x]
+                    positions["y"] = [y]
+
+                    tables.append(positions)
+                    nddatas.append(NDData(data=cutout_psf))
+
+                # Make a bigger cutout to include both apertures: star and local background.
+                cutout = self._slice_data(data, center_yx, 2.3 * self._box_width)
+
+                # Find a rough center of the cutout.
+                mid_point = self._box_width / 2.
+                x_cen, y_cen = 2.3 * mid_point, 2.3 * mid_point
+
+                # Filter and choose the pixels only in the middle region of the cutout.
+                mask = np.zeros(cutout.shape, dtype=bool)
+                mask[np.int(x_cen - mid_point):np.int(x_cen + mid_point),
+                     np.int(y_cen - mid_point):np.int(y_cen + mid_point)] = True
+
+                # Recalculate the centroid for the selected area to improve precision.
+                new_x_cen, new_y_cen = self._estimate_centroid_via_2dgaussian(cutout, mask=~mask)
+                num_frame = self.fits_files.index(fn) + 1
+
+                # Save cutout
+                self.save_star_cutout(star_id=f"Ref_{ref_index + 1}", x=new_x_cen, y=new_y_cen,
+                                      cutout=cutout, num_frame=num_frame, filename=fn)
+
+            ref_stars_flux_sec.append(np.asarray(object_counts) / self.exptimes)
+            ref_stars_background_sec.append(np.asarray(background_in_object) / self.exptimes)
+
+            print(f"\n{18 * ' '}Finished aperture photometry on reference star {ref_index}\n")
+
+            if make_effective_psf:
+                print(f"Building effective PSF for target star {self.target_star}")
+                self.make_effective_psf(nddatas, tables)
+
+        self.ref_stars_flux_sec = np.asarray(ref_stars_flux_sec)
+
+        self.ref_stars_background_sec = np.asarray(ref_stars_background_sec)
+
+        sigma_squared_ref = (self.ref_stars_flux_sec * self.exptimes
+                             + self.ref_stars_background_sec * self.exptimes
+                             + (self.readout * self.r)**2 * np.pi / self.detector_gain
+                             + self.airmasses)
+
+        weights_ref_stars = 1.0 / sigma_squared_ref
+
+        self.ref_stars_flux_averaged = np.average(self.ref_stars_flux_sec * self.exptimes,
+                                                  weights=weights_ref_stars, axis=0)
+
+        # Integrated flux per sec for ensemble of reference stars
+        self.ref_stars_total_flux_sec = np.sum(self.ref_stars_flux_sec, axis=0)
+
+        # Integrated sky background for ensemble of reference stars
+        self.ref_stars_total_bkg_sec = np.sum(self.ref_stars_background_sec, axis=0)
+
+        # S/N for reference star per second
+        ref_stars_S_to_N_sec = self.ref_stars_total_flux_sec / np.sqrt(self.ref_stars_total_flux_sec
+                                                                       + self.ref_stars_total_bkg_sec
+                                                                       + (self.readout * self.r)**2 * np.pi
+                                                                       / (self.detector_gain * self.exptimes))
+        # Convert S/N per sec for ensemble to total S/N
+        self.S_to_N_ref = ref_stars_S_to_N_sec * np.sqrt(self.detector_gain * self.exptimes)
 
     # @logged
     def get_relative_flux(self, save_rms=False):
@@ -730,22 +1106,16 @@ class TimeSeriesAnalysis:
         print(pyfiglet.figlet_format(f"1. Time Series")
               + "        Part of transyto package by Jaime A. Alvarado-Montes\n")
 
-        print("{}>\t{} will use {} reference stars for differential photometry\n".
-              format(8 * '-', self.pipeline, len(self.list_reference_stars)))
-
         print(f"{8 * '-'}>\tStarting aperture photometry on target star {self.target_star}:\n")
 
         self.logger.debug(f"-------------- Aperture photometry of {self.target_star} ---------------\n")
         # Get flux of target star
         (target_flux,
          background_in_object,
-         exptimes,
          x_pos_target,
          y_pos_target,
-         times,
-         airmasses) = self.do_photometry(self.target_star, self._data_directory, self.search_pattern,
-                                         ra_star=self.ra_target, dec_star=self.dec_target,
-                                         make_effective_psf=False, save_cutout=True)
+         times) = self.do_photometry(self.target_star, ra_star=self.ra_target,
+                                     dec_star=self.dec_target, make_effective_psf=False)
 
         print(f"\n{18 * ' '}Finished aperture photometry on target star {self.target_star}\n")
 
@@ -760,24 +1130,16 @@ class TimeSeriesAnalysis:
         self.time_norm_factor = 2450000.
         times = bjdtdb_times[0] - self.time_norm_factor
 
-        airmasses = np.asarray(airmasses)
-
-        print(f"\n{8 * '-'}>\t{self.pipeline} will compute now the combined flux of the ensemble\n")
-
         # Positions of target star
         self.x_pos_target = np.array(x_pos_target) - np.nanmean(x_pos_target)
         self.y_pos_target = np.array(y_pos_target) - np.nanmean(y_pos_target)
 
         # Target and background counts per second
-        exptimes = np.asarray(exptimes)
         target_flux = np.asarray(target_flux)
-        target_flux_sec = target_flux / exptimes
-        target_background_sec = np.asarray(background_in_object) / exptimes
+        target_flux_sec = target_flux / self.exptimes
+        target_background_sec = np.asarray(background_in_object) / self.exptimes
 
-        # CCD gain
-        ccd_gain = self.gain
-
-        noise_sources = compute_noises(ccd_gain, exptimes, target_flux_sec,
+        noise_sources = compute_noises(self.detector_gain, self.exptimes, target_flux_sec,
                                        target_background_sec, self.readout, self.r)
 
         # Sigma photon noise
@@ -791,7 +1153,7 @@ class TimeSeriesAnalysis:
 
         # Sigma scintillation
         self.sigma_scint = compute_scintillation(0.143, self.telescope_altitude,
-                                                 airmasses, exptimes)
+                                                 self.airmasses, self.exptimes)
 
         # Total photometric error for 1 mag in one observation
         self.sigma_total = np.sqrt(self.sigma_phot**2.0 + self.sigma_ron**2.0
@@ -800,75 +1162,27 @@ class TimeSeriesAnalysis:
         # Signal to noise: shot, sky noise (per second) and readout
         S_to_N_obj_sec = target_flux_sec / np.sqrt(target_flux_sec + target_background_sec
                                                    + (self.readout * self.r)**2 * np.pi
-                                                   / (ccd_gain * exptimes))
+                                                   / (self.detector_gain * self.exptimes))
         # Convert SN_sec to actual SN
-        S_to_N_obj = S_to_N_obj_sec * np.sqrt(ccd_gain * exptimes)
+        S_to_N_obj = S_to_N_obj_sec * np.sqrt(self.detector_gain * self.exptimes)
 
-        # Get the flux of each reference star
-        reference_star_flux_sec = list()
-        background_in_ref_star_sec = list()
-        reference_airmasses = list()
+        # Find reference stars and do photometry of the ensemble.
+        print(f"\n{8 * '-'}>\t{self.pipeline} will find suitable reference stars for "
+              "differential photometry \n")
+        self._find_ref_stars_coordinates()
 
-        if self._from_coordinates:
-            list_ra_ref_stars = self.ra_ref_stars
-            list_dec_ref_stars = self.dec_ref_stars
-
-        else:
-            list_ra_ref_stars = list([1]) * len(self.list_reference_stars)
-            list_dec_ref_stars = list([1]) * len(self.list_reference_stars)
-
-        for ref_star, ra_ref_star, dec_ref_star in zip(self.list_reference_stars,
-                                                       list_ra_ref_stars,
-                                                       list_dec_ref_stars):
-
-            print(f"{16 * ' '}• Starting aperture photometry on reference star {ref_star}\n")
-
-            self.logger.debug(f"Aperture photometry of {ref_star}\n")
-            (refer_flux,
-             background_in_ref_star,
-             _, _, _, _, ref_airmasses) = self.do_photometry(ref_star, self._data_directory,
-                                                             self.search_pattern,
-                                                             ra_ref_star, dec_ref_star,
-                                                             make_effective_psf=False)
-            reference_star_flux_sec.append(np.asarray(refer_flux) / exptimes)
-            background_in_ref_star_sec.append(np.asarray(background_in_ref_star) / exptimes)
-            reference_airmasses.append(np.asarray(ref_airmasses))
-            print(f"\n{18 * ' '}Finished aperture photometry on reference star {ref_star}\n")
-
-        self.reference_star_flux_sec = np.asarray(reference_star_flux_sec)
-        background_in_ref_star_sec = np.asarray(background_in_ref_star_sec)
-
-        sigma_squared_ref = (reference_star_flux_sec * exptimes
-                             + background_in_ref_star_sec * exptimes
-                             + (self.readout * self.r)**2 * np.pi / ccd_gain
-                             + reference_airmasses)
-
-        weights_ref_stars = 1.0 / sigma_squared_ref
-
-        ref_flux_averaged = np.average(self.reference_star_flux_sec * exptimes,
-                                       weights=weights_ref_stars, axis=0)
-
-        # Integrated flux per sec for ensemble of reference stars
-        total_reference_flux_sec = np.sum(self.reference_star_flux_sec, axis=0)
-
-        # Integrated sky background for ensemble of reference stars
-        total_reference_bkg_sec = np.sum(background_in_ref_star_sec, axis=0)
-
-        # S/N for reference star per second
-        S_to_N_ref_sec = total_reference_flux_sec / np.sqrt(total_reference_flux_sec
-                                                            + total_reference_bkg_sec
-                                                            + (self.readout * self.r)**2 * np.pi
-                                                            / (ccd_gain * exptimes))
-        # Convert S/N per sec for ensemble to total S/N
-        S_to_N_ref = S_to_N_ref_sec * np.sqrt(ccd_gain * exptimes)
+        # Do photometry of the ensemble of reference stars.
+        print(f"\n{8 * '-'}>\t{self.pipeline} will compute now the combined flux of the ensemble\n")
+        self.do_photometry_ref_stars(make_effective_psf=False)
 
         # Relative flux per sec of target star
-        differential_flux = target_flux / ref_flux_averaged
+        differential_flux = target_flux / self.ref_stars_flux_averaged
         # differential_flux = [-2.5 * np.log(target_flux / (r * exptimes)) for r in reference_star_flux_sec]
         # differential_flux = np.average(differential_flux, axis=0)
+        normalized_flux = differential_flux / np.nanmedian(differential_flux)
 
         # Find Differential S/N for object and ensemble
-        S_to_N_diff = 1 / np.sqrt(S_to_N_obj**-2 + S_to_N_ref**-2)
+        S_to_N_diff = 1 / np.sqrt(S_to_N_obj**-2 + self.S_to_N_ref**-2)
 
         # Ending time of computatin analysis.
         end = time.time()
@@ -889,28 +1203,24 @@ class TimeSeriesAnalysis:
 
             with open(file_rms_name, "a") as file:
                 file.write(f"{self.r} {self.std} {self.std_binned} "
-                           f"{np.nanmedian(S_to_N_obj)} {np.nanmedian(S_to_N_ref)} "
+                           f"{np.nanmedian(S_to_N_obj)} {np.nanmedian(self.S_to_N_ref)} "
                            f"{np.nanmedian(S_to_N_diff)}\n")
 
-        return (times, differential_flux, self.sigma_total)
+        return (times, normalized_flux, self.sigma_total)
 
 
 class LightCurve(TimeSeriesAnalysis):
 
     def __init__(self, target_star="", data_directory="", search_pattern="*.fit*",
-                 list_reference_stars=[], aperture_radius=15, from_coordinates=True, ra_target=None,
-                 dec_target=None, transit_times=[], ra_ref_stars=None, dec_ref_stars=None,
-                 telescope=""):
-        super(LightCurve, self).__init__(target_star=target_star, data_directory=data_directory,
+                 from_coordinates=True, ra_target=None, dec_target=None,
+                 transit_times=[], telescope=""):
+        super(LightCurve, self).__init__(target_star=target_star,
+                                         data_directory=data_directory,
                                          search_pattern=search_pattern,
-                                         list_reference_stars=list_reference_stars,
-                                         aperture_radius=aperture_radius,
                                          from_coordinates=from_coordinates,
                                          ra_target=ra_target,
                                          dec_target=dec_target,
                                          transit_times=transit_times,
-                                         ra_ref_stars=ra_ref_stars,
-                                         dec_ref_stars=dec_ref_stars,
                                          telescope=telescope)
 
     def clip_outliers(self, flux, sigma_lower=0, sigma_upper=0, **kwargs):
@@ -932,8 +1242,7 @@ class LightCurve(TimeSeriesAnalysis):
         masked arrays
             Flux array clipped out of outliers, mask with the indexes of good values in flux.
         """
-
-        mask = np.where((flux > sigma_lower) * (flux < sigma_upper))
+        mask = np.where(np.logical_and(flux >= sigma_lower, flux <= sigma_upper))
 
         return flux[mask], mask
 
@@ -1143,24 +1452,18 @@ class LightCurve(TimeSeriesAnalysis):
                                                  sigma_upper=sigma_upper)
 
             # Compute the relative/normalized flux of the target star (post-clipping).
-            normalized_flux = flux / np.nanmedian(out_of_transit_flux[out_of_transit_flux
-                                                                      < sigma_upper])
+            # normalized_flux = flux / np.nanmedian(out_of_transit_flux[out_of_transit_flux
+            #                                                           < sigma_upper])
 
         if not self.transit_times:
-            # Compute the relative/normalized flux of the target star (pre-clipping).
-            normalized_flux = flux / np.nanmedian(flux)
-
             # Boxplot to identify outliers.
-            my_box = plt.boxplot(normalized_flux)
+            my_box = plt.boxplot(flux)
             sigma_lower = my_box["caps"][0].get_ydata()[0]
             sigma_upper = my_box["caps"][1].get_ydata()[0]
 
             # Get the flux and mask after clipping the outliers.
             flux, clip_mask = self.clip_outliers(flux, sigma_lower=sigma_lower,
                                                  sigma_upper=sigma_upper)
-
-            # Compute the relative/normalized flux of the target star (post-clipping).
-            normalized_flux = flux / np.nanmedian(flux)
 
         # Select unclipped values in the array of flux errors.
         flux_uncertainty = flux_uncertainty[clip_mask]
@@ -1174,7 +1477,7 @@ class LightCurve(TimeSeriesAnalysis):
         # Name for boxplot.
         violin_name = os.path.join(self._output_directory, "Violinplot_cam"
                                    f"{self.instrument}_rad{self.r}pix_"
-                                   f"{len(self.list_reference_stars)}refstar.png")
+                                   f"{len(self.ref_stars_coordinates_list)}refstar.png")
 
         # ax = sns.swarmplot(y=normalized_flux, color=".25", zorder=3)
         if self.transit_times:
@@ -1187,7 +1490,7 @@ class LightCurve(TimeSeriesAnalysis):
 
             flags = np.array(flags)
 
-            df = pd.DataFrame({"flux": pd.Series(normalized_flux), "Data": pd.Series(flags)})
+            df = pd.DataFrame({"flux": pd.Series(flux), "Data": pd.Series(flags)})
             df["all"] = ""
 
             # Violin plot to analyse distribution (with transit times).
@@ -1196,7 +1499,7 @@ class LightCurve(TimeSeriesAnalysis):
 
         if not self.transit_times:
             # Violin plot to analyse distribution (without transit times).
-            ax = sns.violinplot(y=normalized_flux, inner="stick", linewidth=1.0, cut=2,
+            ax = sns.violinplot(y=flux, inner="stick", linewidth=1.0, cut=2,
                                 bw="silverman")
 
         ax.set_xlabel("Density Distribution", fontsize=11)
@@ -1215,12 +1518,12 @@ class LightCurve(TimeSeriesAnalysis):
             print("Starting transit modeling via TLS:\n")
 
             # flatten_flux = self.detrend_timeseries(time, flux)
-            results = self.model_lightcurve(time, normalized_flux)
+            results = self.model_lightcurve(time, flux)
 
             # Name for folded light curve.
             model_lightcurve_name = os.path.join(self._output_directory, "Model_lightcurve_cam"
                                                  f"{self.instrument}_rad{self.r}pix_"
-                                                 f"{len(self.list_reference_stars)}refstar.png")
+                                                 f"{len(self.ref_stars_coordinates_list)}refstar.png")
 
             loc = plticker.MultipleLocator(base=5)  # this locator puts ticks at regular intervals
 
@@ -1241,7 +1544,7 @@ class LightCurve(TimeSeriesAnalysis):
             # Name for periodogram.
             periodogram_name = os.path.join(self._output_directory, "Periodogram_cam"
                                             f"{self.instrument}_rad{self.r}pix_"
-                                            f"{len(self.list_reference_stars)}refstar.png")
+                                            f"{len(self.ref_stars_coordinates_list)}refstar.png")
 
             fig, ax = plt.subplots(1, 1, figsize=(8.5, 5.0))
             ax.axvline(results.period, alpha=0.4, lw=3)
@@ -1257,31 +1560,31 @@ class LightCurve(TimeSeriesAnalysis):
             fig.savefig(periodogram_name, dpi=300)
 
             # Detrend data using the previous transit model.
-            # normalized_flux = self.detrend_data(time, normalized_flux, R_star=star_data["Rs"],
+            # flux = self.detrend_data(time, flux, R_star=star_data["Rs"],
             #                                     M_star=star_data["Ms"], Porb=results.period)
 
         # Detrend data without using transit model.
         if detrend and not model_transit:
-            normalized_flux = self.detrend_timeseries(time, flux)
+            flux = self.detrend_timeseries(time, flux)
 
         # Standard deviation in ppm for the observation
-        std = np.nanstd(normalized_flux)
+        std = np.nanstd(flux)
 
         # Name for light curve.
         lightcurve_name = os.path.join(self._output_directory, "Lightcurve_cam"
                                        f"{self.instrument}_rad{self.r}pix_"
-                                       f"{len(self.list_reference_stars)}refstar.png")
+                                       f"{len(self.ref_stars_coordinates_list)}refstar.png")
 
         fig, ax = plt.subplots(2, 1,
                                sharey="row", sharex="col", figsize=(8.5, 6.3))
         fig.suptitle(f"Differential Photometry\nTarget Star {star_name}, "
-                     f"Vmag={star_vmag} (Tmag={star_tmag}) Aperture = {self.r} pix, "
+                     f"Vmag={star_vmag} (Tmag={star_tmag})"
                      f"Focus: {self.header['FOC-POS']} eu", fontsize=13)
 
-        ax[1].plot(time, normalized_flux, "k.", ms=3,
+        ax[1].plot(time, flux, "k.", ms=3,
                    label=f"NBin = {self.exptime:.1f} s, std = {std:.2%}")
 
-        ax[1].errorbar(time, normalized_flux, yerr=flux_uncertainty,
+        ax[1].errorbar(time, flux, yerr=flux_uncertainty,
                        fmt="none", ecolor="k", elinewidth=0.8,
                        label=r"$\sigma_{\mathrm{tot}}=\sqrt{\sigma_{\mathrm{phot}}^{2} "
                        r"+ \sigma_{\mathrm{sky}}^{2} + \sigma_{\mathrm{scint}}^{2} + "
@@ -1289,7 +1592,7 @@ class LightCurve(TimeSeriesAnalysis):
 
         # Binned data and times
         if bins != 0:
-            binned_times, binned_flux = self.bin_timeseries(time, normalized_flux, bins)
+            binned_times, binned_flux = self.bin_timeseries(time, flux, bins)
             std_binned = np.nanstd(binned_flux)
 
             # Total time for binsize
@@ -1300,18 +1603,18 @@ class LightCurve(TimeSeriesAnalysis):
         ax[1].set_ylabel("Relative Flux", fontsize=13)
         ax[1].legend(fontsize=8.0, loc=(0.0, 1.0), ncol=3, framealpha=1.0, frameon=False)
 
-        for counter in range(len(self.list_reference_stars)):
+        for counter in range(len(self.ref_stars_coordinates_list)):
             # ax[1].xaxis.set_major_formatter(dates.DateFormatter("%H:%M:%S"))
 
             # Colors for comparison stars
             # colors = ["blue", "magenta", "green", "cyan", "firebrick"]
 
-            ax[0].plot(time, self.reference_star_flux_sec[counter][~nan_mask][clip_mask]
-                       / np.nanmean(self.reference_star_flux_sec[counter][~nan_mask][clip_mask]),
-                       "o", ms=1.3, label=f"Ref. {self.list_reference_stars[counter]}")
+            ax[0].plot(time, self.ref_stars_flux_sec[counter][~nan_mask][clip_mask]
+                       / np.nanmean(self.ref_stars_flux_sec[counter][~nan_mask][clip_mask]),
+                       "o", ms=1.3, label=f"Ref. {counter}")
             ax[0].set_ylabel("Relative Flux", fontsize=13)
             # ax[0].set_ylim((0.9, 1.05))
-            ax[0].legend(fontsize=8.1, loc="lower left", ncol=len(self.list_reference_stars),
+            ax[0].legend(fontsize=8.1, loc="lower left", ncol=len(self.ref_stars_coordinates_list),
                          framealpha=1.0, frameon=True)
 
         ax[1].text(0.97, 0.9, "b)", fontsize=11, transform=ax[1].transAxes)
@@ -1338,7 +1641,7 @@ class LightCurve(TimeSeriesAnalysis):
             # Name for plot of tracking.
             plot_tracking_name = os.path.join(self._output_directory, "tracking_plot_cam"
                                               f"{self.instrument}_rad{self.r}pix_"
-                                              f"{len(self.list_reference_stars)}refstar.png")
+                                              f"{len(self.ref_stars_coordinates_list)}refstar.png")
 
             fig, ax = plt.subplots(1, 1, figsize=(8.5, 6.3))
             ax.plot(time, self.x_pos_target[~nan_mask][clip_mask], "ro-",
@@ -1359,7 +1662,7 @@ class LightCurve(TimeSeriesAnalysis):
             # Name for plot of noise sources.
             plot_noise_name = os.path.join(self._output_directory, "noises_plot_cam"
                                            f"{self.instrument}_rad{self.r}pix_"
-                                           f"{len(self.list_reference_stars)}refstar.png")
+                                           f"{len(self.ref_stars_coordinates_list)}refstar.png")
 
             fig, ax = plt.subplots(1, 1, sharey="row", sharex="col", figsize=(8.5, 6.3))
             ax.set_title(f"Noise Sources in {star_name} " r"($m_\mathrm{V}=10.0$)", fontsize=13)
@@ -1454,24 +1757,17 @@ class LightCurve(TimeSeriesAnalysis):
                                                  sigma_upper=sigma_upper)
 
             # Compute the relative/normalized flux of the target star (post-clipping).
-            normalized_flux = flux / np.nanmedian(out_of_transit_flux[out_of_transit_flux
-                                                                      < sigma_upper])
+            # flux = flux / np.nanmedian(out_of_transit_flux[out_of_transit_flux < sigma_upper])
 
         if not self.transit_times:
-            # Compute the relative/normalized flux of the target star (pre-clipping).
-            normalized_flux = flux / np.nanmedian(flux)
-
             # Boxplot to identify outliers.
-            my_box = plt.boxplot(normalized_flux)
+            my_box = plt.boxplot(flux)
             sigma_lower = my_box["caps"][0].get_ydata()[0]
             sigma_upper = my_box["caps"][1].get_ydata()[0]
 
             # Get the flux and mask after clipping the outliers.
             flux, clip_mask = self.clip_outliers(flux, sigma_lower=sigma_lower,
                                                  sigma_upper=sigma_upper)
-
-            # Compute the relative/normalized flux of the target star (post-clipping).
-            normalized_flux = flux / np.nanmedian(flux)
 
         # Select unclipped values in the array of flux errors.
         flux_uncertainty = flux_uncertainty[clip_mask]
@@ -1486,7 +1782,7 @@ class LightCurve(TimeSeriesAnalysis):
         violin_name = os.path.join(output_directory, "Violinplot_cam"
                                    f"{self.telescope}_rad{self.r}pix.png")
 
-        # ax = sns.swarmplot(y=normalized_flux, color=".25", zorder=3)
+        # ax = sns.swarmplot(y=flux, color=".25", zorder=3)
         if self.transit_times:
             flags = []
             for f in flux:
@@ -1497,7 +1793,7 @@ class LightCurve(TimeSeriesAnalysis):
 
             flags = np.array(flags)
 
-            df = pd.DataFrame({"flux": pd.Series(normalized_flux), "Data": pd.Series(flags)})
+            df = pd.DataFrame({"flux": pd.Series(flux), "Data": pd.Series(flags)})
             df["all"] = ""
 
             # Violin plot to analyse distribution (with transit times).
@@ -1506,7 +1802,7 @@ class LightCurve(TimeSeriesAnalysis):
 
         if not self.transit_times:
             # Violin plot to analyse distribution (without transit times).
-            ax = sns.violinplot(y=normalized_flux, inner="box", linewidth=1.0, cut=2,
+            ax = sns.violinplot(y=flux, inner="box", linewidth=1.0, cut=2,
                                 bw="silverman")
 
         ax.set_xlabel("Density Distribution", fontsize=11)
@@ -1531,11 +1827,11 @@ class LightCurve(TimeSeriesAnalysis):
             ab = (limb_dc[1], limb_dc[2])
 
             # Detrend data using the previous transit model.
-            normalized_flux = self.detrend_timeseries(time, normalized_flux, R_star=star_radius,
-                                                      M_star=star_mass, Porb=planet_period)
+            flux = self.detrend_timeseries(time, flux, R_star=star_radius,
+                                           M_star=star_mass, Porb=planet_period)
 
             # flatten_flux = self.detrend_timeseries(time, flux)
-            results = self.model_lightcurve(time, normalized_flux, limb_dc=ab)
+            results = self.model_lightcurve(time, flux, limb_dc=ab)
 
             # Name for folded light curve.
             model_lightcurve_name = os.path.join(output_directory, "Model_lightcurve_cam"
@@ -1577,10 +1873,10 @@ class LightCurve(TimeSeriesAnalysis):
 
         # Detrend data without using transit model.
         if detrend and not model_transit:
-            normalized_flux = self.detrend_timeseries(time, flux)
+            flux = self.detrend_timeseries(time, flux)
 
         # Standard deviation in ppm for the observation
-        std = np.nanstd(normalized_flux)
+        std = np.nanstd(flux)
 
         lightcurve_name = os.path.join(output_directory, "Lightcurve_cam"
                                        f"{self.telescope}_rad{self.r}pix_.png")
@@ -1590,10 +1886,10 @@ class LightCurve(TimeSeriesAnalysis):
         fig.suptitle(f"Differential Photometry\nTarget Star {star_name}, Vmag={star_vmag} "
                      f"(Tmag={star_tmag}), Aperture = {self.r} pix", fontsize=13)
 
-        ax.plot(time, normalized_flux, "k.", ms=3,
+        ax.plot(time, flux, "k.", ms=3,
                 label=f"NBin = {exptime:.1f} s, std = {std:.2%}")
 
-        # ax.errorbar(time, normalized_flux, yerr=flux_uncertainty,
+        # ax.errorbar(time, flux, yerr=flux_uncertainty,
         #             fmt="none", ecolor="k", elinewidth=0.8,
         #             label=r"$\sigma_{\mathrm{tot}}=\sqrt{\sigma_{\mathrm{phot}}^{2} "
         #             r"+ \sigma_{\mathrm{sky}}^{2} + \sigma_{\mathrm{scint}}^{2} + "
@@ -1601,7 +1897,7 @@ class LightCurve(TimeSeriesAnalysis):
 
         # Binned data and times
         if bins != 0:
-            binned_times, binned_flux = self.bin_timeseries(time, normalized_flux, bins)
+            binned_times, binned_flux = self.bin_timeseries(time, flux, bins)
             std_binned = np.nanstd(binned_flux)
 
             # Total time for binsize
