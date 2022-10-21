@@ -364,7 +364,7 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
         for met in possible_mets:
             # Estimate distance between current and input metallicity:
             c_m_diff = np.abs(met - s_met)
-            if(c_m_diff < m_diff):
+            if c_m_diff < m_diff:
                 chosen_met = met
                 m_diff = copy(c_m_diff)
 
@@ -399,13 +399,13 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
         html = str(response.read())
         ok = True
         filenames = []
-        while(ok):
+        while ok:
             idx = html.find('>i' + met_dir.lower())
-            if(idx == -1):
+            if idx == -1:
                 ok = False
             else:
                 for i in range(30):
-                    if(html[idx + i] == '<'):
+                    if html[idx + i] == '<':
                         filenames.append(html[idx + 1:idx + i])
             html = html[idx + 1:]
 
@@ -485,9 +485,9 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
                         line = lines[i]
                         idx = line.find('EFF')
                         idx2 = line.find('\x0c')
-                        if(idx2 != -1 or line == ''):
+                        if idx2 != -1 or line == '':
                             pass
-                        elif(idx != -1):
+                        elif idx != -1:
                             lines = lines[i:]
                             break
                         else:
@@ -497,7 +497,7 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
                                 f.write(s + '\n')
                     if save_mr_file:
                         f.close()
-                    if(i == len(lines) - 1):
+                    if i == len(lines) - 1:
                         break
 
     # Now, assuming models are written in machine readable form, we can work:
@@ -512,7 +512,7 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
         fname = tefffolder.split('/')[-1]
         teff = np.double(fname)
         c_t_diff = abs(teff - s_teff)
-        if(c_t_diff < t_diff):
+        if c_t_diff < t_diff:
             chosen_teff = teff
             chosen_teff_folder = tefffolder
             t_diff = c_t_diff
@@ -562,7 +562,7 @@ def PHOENIX_model_search(s_met, s_grav, s_teff, s_vturb):
     model_path = rootdir + '/phoenix_models/raw_models/'
 
     # In PHOENIX models, all of them are computed with vturb = 2 km/2
-    if(s_vturb == -1):
+    if s_vturb == -1:
         print('\t    + No known turbulent velocity. Setting it to 2 km/s.')
         s_vturb = 2.0
 
@@ -575,7 +575,7 @@ def PHOENIX_model_search(s_met, s_grav, s_teff, s_vturb):
         for met in possible_mets:
             # Estimate distance between current and input metallicity:
             c_m_diff = np.abs(met - s_met)
-            if(c_m_diff < m_diff):
+            if c_m_diff < m_diff:
                 chosen_met = met
                 m_diff = copy(c_m_diff)
 
@@ -620,7 +620,7 @@ def PHOENIX_model_search(s_met, s_grav, s_teff, s_vturb):
         all_files = []
         while True:
             idx = html.find('lte')
-            if(idx == -1):
+            if idx == -1:
                 break
             else:
                 idx2 = html.find('.fits')
@@ -636,7 +636,7 @@ def PHOENIX_model_search(s_met, s_grav, s_teff, s_vturb):
     for file in all_files:
         teff = np.double(file[3:8])
         c_t_diff = abs(teff - s_teff)
-        if(c_t_diff < t_diff):
+        if c_t_diff < t_diff:
             chosen_teff = teff
             t_diff = c_t_diff
 
@@ -656,7 +656,7 @@ def PHOENIX_model_search(s_met, s_grav, s_teff, s_vturb):
     for file in teff_files:
         grav = np.double(file[9:13])
         c_g_diff = abs(grav - s_grav)
-        if(c_g_diff < grav_diff):
+        if c_g_diff < grav_diff:
             chosen_grav = grav
             grav_diff = c_g_diff
             chosen_fname = file
@@ -709,7 +709,7 @@ def get_response(min_w, max_w, response_function):
     # Open the response file, which we assume has as first column wavelength
     # and second column the response:
     w, r = np.loadtxt(response_file, unpack=True)
-    if('kepler' in response_file):
+    if 'kepler' in response_file:
         w = 10 * w
         if min_w is None:
             min_w = min(w)
@@ -718,7 +718,7 @@ def get_response(min_w, max_w, response_function):
         print('\t           > Kepler response file detected.  Switch from nanometers to Angstroms.')
         print('\t           > Minimum wavelength: {} A.\n'
               '\t           > Maximum wavelength: {} A.'.format(min(w), max(w)))
-    elif('IRAC' in response_file):
+    elif 'IRAC' in response_file:
         w = 1e4 * w
         if min_w is None:
             min_w = min(w)
@@ -894,7 +894,7 @@ def get_rmax(mu, I0):
     m_maxes = m[idx_lo:idx_hi]
     spl = si.UnivariateSpline(r_maxes[::-1], m_maxes[::-1], s=0, k=4)
     fine_r_max = spl.derivative().roots()
-    if(len(fine_r_max) > 1):
+    if len(fine_r_max) > 1:
         abs_diff = np.abs(fine_r_max - r_max)
         iidx_min = np.where(abs_diff == np.min(abs_diff))[0]
         fine_r_max = fine_r_max[iidx_min]

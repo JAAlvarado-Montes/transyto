@@ -48,7 +48,7 @@ class Data:
             if err.args[0] == "a unit for CCDData must be specified.":
                 data = CCDData.read(fname, unit=data_type)
             else:
-                raise(err)
+                raise err
         return data
 
     @staticmethod
