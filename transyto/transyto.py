@@ -16,7 +16,10 @@ import scipy
 import matplotlib.ticker as plticker
 import seaborn as sns
 
+from astroquery.simbad import Simbad
+
 from astropy.coordinates import SkyCoord
+from astropy.coordinates.name_resolve import NameResolveError
 from astropy.utils.exceptions import AstropyWarning
 from astropy.wcs import WCS
 from astropy.time import Time
@@ -97,7 +100,7 @@ class TimeSeriesAnalysis:
         """
 
         # Name of target star and number of reference stars to be used.
-        self.target_star = target_star
+        self.target_star_id = target_star
 
         # Data directory and search pattern for files.
         self._data_directory = data_directory
@@ -105,7 +108,7 @@ class TimeSeriesAnalysis:
 
         # List of files to be used by transyto to perform differential photometry.
         self.fits_files = search_files_across_directories(self._data_directory,
-                                                          self._search_pattern)
+                                                          self._search_pattern)[:2]
 
         # Output directory for light curves
         if self._data_directory:
@@ -281,6 +284,29 @@ class TimeSeriesAnalysis:
         y = A * np.exp(-1 * B * (x - mi)**2 / (2 * sig**2))
         return y
 
+    def _find_target_star(self):
+        """Find the target star
+        """
+        if self._from_coordinates:
+            self.target_star_coord = SkyCoord(self.ra_target, self.dec_target,
+                                              unit='deg', frame='icrs')
+        else:
+            while True:
+                try:
+                    self.target_star_coord = SkyCoord.from_name(self.target_star_id)
+                except NameResolveError:
+                    self.target_star_id = input(f"{9 * ' '}\tName syntax is incorrect, please use a"
+                                                " different name syntax for the target star: ")
+                    continue
+                break
+
+            # Refine the name of the target star using the main ID from Simbad
+            simbad_result_table = Simbad.query_object(self.target_star_id)
+            self.target_star_id = simbad_result_table["MAIN_ID"][0]
+
+            print(f"\n{9 * ' '}\tThe target star was found, {self.pipeline} will proceed"
+                  " with the photometry:\n")
+
     def _find_ref_stars_coordinates(self):
         """Get all data from plate-solved images (right ascention,
            declination, airmass, dates, etc). Then, it converts the
@@ -288,10 +314,6 @@ class TimeSeriesAnalysis:
            call make_aperture and find its total counts.
 
         """
-        if self._from_coordinates:
-            star = SkyCoord(self.ra_target, self.dec_target, unit='deg', frame='icrs')
-        else:
-            star = SkyCoord.from_name(self.target_star)
 
         # Get data, header, and WCS of first frame (fits file)
         fn = self.fits_files[0]
@@ -302,7 +324,7 @@ class TimeSeriesAnalysis:
         if wcs.is_celestial:
 
             # Star pixel positions in the image
-            center_yx = wcs.all_world2pix(star.ra, star.dec, 0)
+            center_yx = wcs.all_world2pix(self.target_star_coord.ra, self.target_star_coord.dec, 0)
 
             cutout = self._slice_data(data, center_yx, self._box_width)
             masked_cutout = self._mask_data(cutout)
@@ -377,7 +399,7 @@ class TimeSeriesAnalysis:
             ax.imshow(data, cmap='Greys', origin='lower',
                       norm=norm, interpolation='nearest')
             target_patches = target_aperture.plot(color='red', lw=1.5, alpha=0.5,
-                                                  label=f'Target: {self.target_star}')
+                                                  label=f'Target: {self.target_star_id}')
             ref_patches = ref_apertures.plot(color='blue', lw=1.5, alpha=0.5,
                                              label="Reference stars")
 
@@ -427,7 +449,7 @@ class TimeSeriesAnalysis:
             ax.imshow(data, cmap='Greys', origin='lower',
                       norm=norm, interpolation='nearest')
             target_patches = target_aperture.plot(color='red', lw=1.5, alpha=0.5,
-                                                  label=f'Target: {self.target_star}')
+                                                  label=f'Target: {self.target_star_id}')
             ref_patches = ref_apertures.plot(color='blue', lw=1.5, alpha=0.5,
                                              label="Reference stars")
 
@@ -763,8 +785,7 @@ class TimeSeriesAnalysis:
                 phot_table)
 
     # @logged
-    def do_photometry(self, star_id, ra_star=None, dec_star=None,
-                      make_effective_psf=False):
+    def do_photometry(self, make_effective_psf=False):
         """Get all data from plate-solved images (right ascention,
            declination, airmass, dates, etc). Then, it converts the
            right ascention and declination into image positions to
@@ -780,10 +801,6 @@ class TimeSeriesAnalysis:
         Counts of a star, list of good frames and airmass: tuple
 
         """
-        if self._from_coordinates:
-            star = SkyCoord(ra_star, dec_star, unit='deg', frame='icrs')
-        else:
-            star = SkyCoord.from_name(star_id)
 
         # List of ADU counts for the source, background
         object_counts = list()
@@ -822,7 +839,8 @@ class TimeSeriesAnalysis:
             if wcs.is_celestial:
 
                 # Get the initial  (x, y) positions of the target star in the image.
-                center_yx = wcs.all_world2pix(star.ra, star.dec, 0)
+                center_yx = wcs.all_world2pix(self.target_star_coord.ra,
+                                              self.target_star_coord.dec, 0)
 
                 # Do a first cutout to refine the centroid of the target star.
                 first_cutout = self._slice_data(data, center_yx, self._box_width)
@@ -915,7 +933,7 @@ class TimeSeriesAnalysis:
                 num_frame = self.fits_files.index(fn) + 1
 
                 # Save cutout
-                self.save_star_cutout(star_id=star_id, x=new_x_cen, y=new_y_cen,
+                self.save_star_cutout(star_id=self.target_star_id, x=new_x_cen, y=new_y_cen,
                                       cutout=cutout, num_frame=num_frame, filename=fn)
 
             else:
@@ -1043,7 +1061,7 @@ class TimeSeriesAnalysis:
                 num_frame = self.fits_files.index(fn) + 1
 
                 # Save cutout
-                self.save_star_cutout(star_id=f"Ref_{ref_index + 1}", x=new_x_cen, y=new_y_cen,
+                self.save_star_cutout(star_id=f"Ref_{ref_index}", x=new_x_cen, y=new_y_cen,
                                       cutout=cutout, num_frame=num_frame, filename=fn)
 
             ref_stars_flux_sec.append(np.asarray(object_counts) / self.exptimes)
@@ -1106,18 +1124,19 @@ class TimeSeriesAnalysis:
         print(pyfiglet.figlet_format(f"1. Time Series")
               + "        Part of transyto package by Jaime A. Alvarado-Montes\n")
 
-        print(f"{8 * '-'}>\tStarting aperture photometry on target star {self.target_star}:\n")
+        print(f"{8 * '-'}>\tStarting aperture photometry on target star {self.target_star_id}:\n")
 
-        self.logger.debug(f"-------------- Aperture photometry of {self.target_star} ---------------\n")
+        self._find_target_star()
+
+        self.logger.debug(f"-------------- Aperture photometry of {self.target_star_id} ---------------\n")
         # Get flux of target star
         (target_flux,
          background_in_object,
          x_pos_target,
          y_pos_target,
-         times) = self.do_photometry(self.target_star, ra_star=self.ra_target,
-                                     dec_star=self.dec_target, make_effective_psf=False)
+         times) = self.do_photometry(make_effective_psf=False)
 
-        print(f"\n{18 * ' '}Finished aperture photometry on target star {self.target_star}\n")
+        print(f"\n{18 * ' '}Finished aperture photometry on target star {self.target_star_id}\n")
 
         # Get the date times anc compute the Barycentric Julian Date (Barycentric Dynamical Time)
         times = np.asarray(times)
@@ -1189,7 +1208,7 @@ class TimeSeriesAnalysis:
         exec_time = end - start
 
         # Print when all of the analysis ends
-        print(f"{8 * '-'}>\tDifferential photometry of {self.target_star} has been finished, "
+        print(f"{8 * '-'}>\tDifferential photometry of {self.target_star_id} has been finished, "
               f"with {len(self.good_frames_list)} frames "
               f"of camera {self.instrument} (run time: {exec_time:.3f} sec)\n")
 
@@ -1375,8 +1394,8 @@ class LightCurve(TimeSeriesAnalysis):
         return results
 
     # @logged
-    def plot(self, time=[], flux=[], flux_uncertainty=[], bins=30, detrend=False, plot_tracking=False,
-             plot_noise_sources=False, model_transit=False):
+    def plot(self, time=[], flux=[], flux_uncertainty=[], bins=30, detrend=False,
+             plot_tracking=False, plot_noise_sources=False, model_transit=False):
         """Plot a light curve using the flux time series
 
         Parameters
@@ -1407,7 +1426,8 @@ class LightCurve(TimeSeriesAnalysis):
               + "\t     Part of transyto package by Jaime A. Alvarado-Montes\n")
 
         # Get the data from the target star.
-        star_data = catalog.StarData(self.target_star).query_from_mast()
+        star_data = catalog.StarData(self.target_star_id).query_from_mast()
+
         star_name = star_data["star_name"]
         star_vmag = star_data["Vmag"]
         star_tmag = star_data["Tmag"]
@@ -1603,14 +1623,15 @@ class LightCurve(TimeSeriesAnalysis):
         ax[1].set_ylabel("Relative Flux", fontsize=13)
         ax[1].legend(fontsize=8.0, loc=(0.0, 1.0), ncol=3, framealpha=1.0, frameon=False)
 
-        for counter in range(len(self.ref_stars_coordinates_list)):
+        for counter, ref_star_flux_sec in zip(self.ref_stars_coordinates_list.index.values.tolist(),
+                                              self.ref_stars_flux_sec):
             # ax[1].xaxis.set_major_formatter(dates.DateFormatter("%H:%M:%S"))
 
             # Colors for comparison stars
             # colors = ["blue", "magenta", "green", "cyan", "firebrick"]
 
-            ax[0].plot(time, self.ref_stars_flux_sec[counter][~nan_mask][clip_mask]
-                       / np.nanmean(self.ref_stars_flux_sec[counter][~nan_mask][clip_mask]),
+            ax[0].plot(time, ref_star_flux_sec[~nan_mask][clip_mask]
+                       / np.nanmean(ref_star_flux_sec[~nan_mask][clip_mask]),
                        "o", ms=1.3, label=f"Ref. {counter}")
             ax[0].set_ylabel("Relative Flux", fontsize=13)
             # ax[0].set_ylim((0.9, 1.05))
@@ -1635,7 +1656,7 @@ class LightCurve(TimeSeriesAnalysis):
         fig.subplots_adjust(hspace=0.2)
         fig.savefig(lightcurve_name, dpi=300)
 
-        print(f"The light curve of {star_name} was plotted")
+        print(f"The light curve of {self.target_star_id} was plotted")
 
         if plot_tracking:
             # Name for plot of tracking.
@@ -1695,7 +1716,7 @@ class LightCurve(TimeSeriesAnalysis):
               + "\t     Part of transyto package by Jaime A. Alvarado-Montes\n")
 
         # Get the data from the target star.
-        star_data = catalog.StarData(self.target_star).query_from_mast()
+        star_data = catalog.StarData(target_star_name).query_from_mast()
         star_name = star_data["star_name"]
         star_vmag = star_data["Vmag"]
         star_tmag = star_data["Tmag"]

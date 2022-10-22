@@ -12,7 +12,7 @@ class StarData:
     """Data from MAST catalog"""
 
     def __init__(self, star_id):
-        """Initialized Data class"""
+        """Initialized StarData class"""
 
         self.star_id = star_id
 

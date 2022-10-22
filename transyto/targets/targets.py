@@ -156,7 +156,8 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
                                     observatory_name.replace("Observatory", "")).ratio()
             sim_ratios.append(ratio)
 
-        obs_idx = np.where(np.array(sim_ratios) >= 0.6)[0][0]
+        # obs_idx = np.where(np.array(sim_ratios) >= 0.6)[0][0]
+        obs_idx = np.argmax(sim_ratios)
 
         observing_site = defined_locations[obs_idx]
     else:
