@@ -9,7 +9,6 @@ import logging
 
 import pandas as pd
 import numpy as np
-import numpy.ma as ma
 import time
 import pyfiglet
 import scipy
@@ -28,6 +27,7 @@ from astropy.nddata import NDData
 from astropy.table import Table
 from astropy.visualization import simple_norm
 from astropy.stats import sigma_clipped_stats
+from astropy.stats import SigmaClip
 from astropy.visualization import SqrtStretch
 from astropy.visualization.mpl_normalize import ImageNormalize
 from astropy.modeling import models, fitting
@@ -44,6 +44,7 @@ from matplotlib import dates
 
 from photutils.detection import DAOStarFinder
 from photutils.aperture.circle import CircularAperture, CircularAnnulus
+from photutils.aperture import ApertureStats
 from photutils import aperture_photometry
 from photutils.centroids import centroid_2dg, centroid_1dg, centroid_com
 from photutils.psf import extract_stars
@@ -108,7 +109,7 @@ class TimeSeriesAnalysis:
 
         # List of files to be used by transyto to perform differential photometry.
         self.fits_files = search_files_across_directories(self._data_directory,
-                                                          self._search_pattern)[:2]
+                                                          self._search_pattern)
 
         # Output directory for light curves
         if self._data_directory:
@@ -252,11 +253,13 @@ class TimeSeriesAnalysis:
                       np.int(y - width / 2.):np.int(y + width / 2.)]
         return cutout
 
-    def _mask_data(self, image, sigma=1.0):
-        threshold = np.median(image - (sigma * np.std(image)))
-        masked_image = ma.masked_values(image, threshold)
+    def _mask_noise(self, data, noise_mean, noise_std, threshold_sigma=3.0):
+        # threshold = np.median(image - (sigma * np.std(image)))
+        # masked_image = ma.masked_values(image, threshold)
 
-        return masked_image
+        mask = data < (noise_mean + threshold_sigma * noise_std)
+
+        return mask
 
     def _estimate_centroid_via_2dgaussian(self, data, mask):
         """Computes the centroid of a data array using a 2D gaussian
@@ -326,24 +329,42 @@ class TimeSeriesAnalysis:
             # Star pixel positions in the image
             center_yx = wcs.all_world2pix(self.target_star_coord.ra, self.target_star_coord.dec, 0)
 
+            # Slice the data to mask the target from DAOSTAR algorithm
             cutout = self._slice_data(data, center_yx, self._box_width)
-            masked_cutout = self._mask_data(cutout)
 
-            x_cen, y_cen = self._find_centroid(center_yx, cutout, masked_cutout.mask,
-                                               method="2dgaussian")
+            # Set sigma clipping algorithm
+            sigclip = SigmaClip(sigma=3.0, maxiters=50)
+            # Find noise local level of the target star.
+            noise_level = CircularAnnulus(center_yx, r_in=20, r_out=40)
+            # Get the statistics of the annulus (bakgroound) aperture.
+            bkg_stats = ApertureStats(data, noise_level, sigma_clip=sigclip)
+            noise_median, noise_std = bkg_stats.median, bkg_stats.std
 
+            # Create the mask using the statistics from the aperture.
+            cutout_mask = self._mask_noise(cutout, noise_median, noise_std)
+
+            # Calculate the centroid of the target star (and use the mask to remove noise level).
+            x_cen, y_cen = self._find_centroid(center_yx, cutout, cutout_mask, method="2dgaussian")
+
+            # Create the mask that will be used to remove the target from DAOSTAR algorithm.
             target_mask = np.zeros(data.shape, dtype=bool)
             target_mask[np.int(x_cen - self._box_width / 2.):np.int(x_cen + self._box_width / 2.),
                         np.int(y_cen - self._box_width / 2.):np.int(y_cen + self._box_width / 2.)] = True
 
             # We clipped and clean the background to leave the stars only
             mean, median, std = sigma_clipped_stats(data, sigma=10.0)
+            # Set the DAOStarFinder algorithm
             daofind = DAOStarFinder(fwhm=3.0, threshold=10 * std)
+            # Find the target star only.
             target = daofind(data - median, mask=~target_mask)
+            # Get the magnitude of the target star.
             target_magnitude = target['mag'][0]
+
+            # Change format in columns of target star daofind.
             for col in target.colnames:
                 target[col].info.format = '%.8g'  # for consistent table output
 
+            # Find the reference stars (avoiding the target star).
             ref_stars = daofind(data - median, mask=target_mask)
             for col in ref_stars.colnames:
                 ref_stars[col].info.format = '%.8g'  # for consistent table output
@@ -845,11 +866,19 @@ class TimeSeriesAnalysis:
                 # Do a first cutout to refine the centroid of the target star.
                 first_cutout = self._slice_data(data, center_yx, self._box_width)
 
-                # Mask those pixels in the first cutout which are mainly sky background.
-                masked_data = self._mask_data(first_cutout)
+                # Set the sigma clipping algorithm to mask pixels of the local noise level.
+                sigclip = SigmaClip(sigma=3.0, maxiters=50)
+                # Create the annulus aperture to get the local noise level.
+                noise_level = CircularAnnulus(center_yx, r_in=20, r_out=40)
+                # Get the statistics of the noise level.
+                bkg_stats = ApertureStats(data, noise_level, sigma_clip=sigclip)
+                noise_median, noise_std = bkg_stats.median, bkg_stats.std
+
+                # Create the mask of the noise level pixes.
+                first_cutout_mask = self._mask_noise(first_cutout, noise_median, noise_std)
 
                 # Calculate the centroid of the star and return (x, y) in original data coordinates.
-                x_cen, y_cen = self._find_centroid(center_yx, first_cutout, masked_data.mask,
+                x_cen, y_cen = self._find_centroid(center_yx, first_cutout, first_cutout_mask,
                                                    method="2dgaussian")
 
                 # Create a new cutout around the new centroid to model the PSF of the target star.
@@ -917,7 +946,7 @@ class TimeSeriesAnalysis:
                     nddatas.append(NDData(data=cutout_psf))
 
                 # Make a bigger cutout to include both apertures: star and local background.
-                cutout = self._slice_data(data, center_yx, 2.3 * self._box_width)
+                cutout = self._slice_data(data, (y_cen, x_cen), 2.3 * self._box_width)
 
                 # Find a rough center of the cutout.
                 mid_point = self._box_width / 2.
@@ -993,13 +1022,25 @@ class TimeSeriesAnalysis:
                 # Star pixel positions in the image
                 center_yx = wcs.all_world2pix(star.ra, star.dec, 0)
 
-                self.first_cutout = self._slice_data(data, center_yx, self._box_width)
+                # Do a first cutout to refine the centroid of each reference star.
+                first_cutout = self._slice_data(data, center_yx, self._box_width)
 
-                masked_data = self._mask_data(self.first_cutout)
+                # Set the sigma clipping algorithm to mask pixels of the local noise level.
+                sigclip = SigmaClip(sigma=3.0, maxiters=50)
+                # Create the annulus aperture to get the local noise level.
+                noise_level = CircularAnnulus(center_yx, r_in=20, r_out=40)
+                # Get the statistics of the noise level.
+                bkg_stats = ApertureStats(data, noise_level, sigma_clip=sigclip)
+                noise_median, noise_std = bkg_stats.median, bkg_stats.std
 
-                x_cen, y_cen = self._find_centroid(center_yx, self.first_cutout, masked_data.mask,
+                # Create the mask of the noise level pixes.
+                first_cutout_mask = self._mask_noise(first_cutout, noise_median, noise_std)
+
+                # Calculate the centroid of each reference star (removing the noise level pixels).
+                x_cen, y_cen = self._find_centroid(center_yx, first_cutout, first_cutout_mask,
                                                    method="2dgaussian")
 
+                # Create new cutout to calculate the FWHM by doing a 2D Gaussian fit to the PSF.
                 new_cutout = self._slice_data(data, (y_cen, x_cen), self._box_width)
 
                 yp, xp = new_cutout.shape
@@ -1045,7 +1086,7 @@ class TimeSeriesAnalysis:
                     nddatas.append(NDData(data=cutout_psf))
 
                 # Make a bigger cutout to include both apertures: star and local background.
-                cutout = self._slice_data(data, center_yx, 2.3 * self._box_width)
+                cutout = self._slice_data(data, (y_cen, x_cen), 2.3 * self._box_width)
 
                 # Find a rough center of the cutout.
                 mid_point = self._box_width / 2.
