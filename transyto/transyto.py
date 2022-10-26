@@ -663,9 +663,9 @@ class TimeSeriesAnalysis:
 
         # Add subplot for normal star
         instrume = self.header["INSTRUME"]
-        fig, (ax, ax1) = plt.subplots(1, 2, figsize=(8, 8))
+        fig, (ax, ax1, ax2) = plt.subplots(1, 3, figsize=(9, 5.5))
         fig.suptitle(f"Huntsman Camera {instrume}\n"
-                     f"Star {star_id} (frame {num_frame})", fontsize=15, y=0.93)
+                     f"Star {star_id} (frame {num_frame})", fontsize=15, y=0.995)
         ax.set_title("Photometry Data\n\n"
                      r"$r_\mathrm{inner\_aperture}$=1 x FWHM$_\mathrm{mean}$" "\n"
                      r"$r_\mathrm{inner\_annulus}$="
@@ -716,6 +716,14 @@ class TimeSeriesAnalysis:
         ax1.yaxis.set_ticks_position('none')
         ax1.set_xticks([])
         ax1.set_yticks([])
+
+        ax2.set_title("Residuals")
+        ax2.imshow(self.new_cutout - self.psf_model(self.x_model, self.y_model), origin="lower",
+                   cmap="viridis", norm=norm_box)
+        ax2.tick_params(axis="both", which="major", labelsize=15)
+        ax2.yaxis.set_ticks_position('none')
+        ax2.set_xticks([])
+        ax2.set_yticks([])
 
         fig.tight_layout()
         fig.savefig(fig_cutouts_name)
