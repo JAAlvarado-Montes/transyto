@@ -107,13 +107,16 @@ class TimeSeriesAnalysis:
         self._data_directory = data_directory
         self._search_pattern = search_pattern
 
+        if not data_directory.endswith('/'):
+            self._data_directory = data_directory + '/'
+
         # List of files to be used by transyto to perform differential photometry.
         self.fits_files = search_files_across_directories(self._data_directory,
                                                           self._search_pattern)
 
         # Output directory for light curves
         if self._data_directory:
-            self._output_directory = data_directory + 'Light_Curve_Analysis'
+            self._output_directory = self._data_directory + 'Light_Curve_Analysis'
             os.makedirs(self._output_directory, exist_ok=True)
 
         # Name of the telescope with which data was collected.
