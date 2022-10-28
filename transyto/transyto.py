@@ -642,7 +642,7 @@ class TimeSeriesAnalysis:
         """
 
         # Output directory for all the cutouts
-        output_directory = self._data_directory + f'{star_id}_Cutouts'
+        output_directory = f'"{self._data_directory}{star_id}_Cutouts"'
         os.makedirs(output_directory, exist_ok=True)
 
         if filename.endswith('.fz'):
