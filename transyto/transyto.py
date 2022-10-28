@@ -107,16 +107,13 @@ class TimeSeriesAnalysis:
         self._data_directory = data_directory
         self._search_pattern = search_pattern
 
-        if not data_directory.endswith('/'):
-            self._data_directory = data_directory + '/'
-
         # List of files to be used by transyto to perform differential photometry.
         self.fits_files = search_files_across_directories(self._data_directory,
                                                           self._search_pattern)
 
         # Output directory for light curves
         if self._data_directory:
-            self._output_directory = self._data_directory + 'Light_Curve_Analysis'
+            self._output_directory = Path(self._data_directory, 'Light_Curve_Analysis')
             os.makedirs(self._output_directory, exist_ok=True)
 
         # Name of the telescope with which data was collected.
@@ -138,13 +135,12 @@ class TimeSeriesAnalysis:
 
         # Output directory for logs
         if self._data_directory:
-            logs_dir = self._data_directory + 'logs_photometry'
+            logs_dir = Path(self._data_directory, 'logs_photometry')
             os.makedirs(logs_dir, exist_ok=True)
 
             # Logger to track activity of the class
             self.logger = logging.getLogger(f'{self.pipeline} logger')
-            self.logger.addHandler(logging.FileHandler(filename=os.path.join(logs_dir,
-                                                                             'photometry.log'),
+            self.logger.addHandler(logging.FileHandler(filename=Path(logs_dir, 'photometry.log'),
                                                        mode='w'))
             self.logger.setLevel(logging.DEBUG)
 
@@ -454,7 +450,7 @@ class TimeSeriesAnalysis:
             ax = fig.add_subplot(111)
 
             # Plot the target and reference stars in the field just as a reference.
-            phot_stars_name = os.path.join(self._output_directory, 'photometry_stars.png')
+            phot_stars_name = Path(self._output_directory, 'photometry_stars.png')
 
             ref_apertures = CircularAperture(new_ref_stars_positions, r=4.)
             target_aperture = CircularAperture(target_star_position, r=4.)
@@ -530,7 +526,7 @@ class TimeSeriesAnalysis:
         output_directory = self._data_directory + 'ePSF'
         os.makedirs(self._data_directory + 'ePSF', exist_ok=True)
 
-        epsf_name = os.path.join(output_directory, 'ePSF.png')
+        epsf_name = Path(output_directory, 'ePSF.png')
 
         # Add subplot for fitted psf star
         fig = plt.figure(figsize=(6.5, 6.5))
@@ -594,8 +590,7 @@ class TimeSeriesAnalysis:
             projections_list.append(np.asarray(projection_average))
 
         # Name of PSF profile image
-        fig_slices_name = os.path.join(output_directory, '{}_{}_profile.png'.
-                                       format(self.instrument, self.target_star))
+        fig_name = Path(output_directory, f'{self.instrument}_{self.target_star}_profile.png')
 
         projection_average = np.sum(projections_list, axis=0) / len(projections_list)
         psf_half = (np.max(projection_average) + np.min(projection_average)) / 2
@@ -621,7 +616,8 @@ class TimeSeriesAnalysis:
         ax.set_xlabel('Pixels', fontsize=15)
         ax.set_ylabel('Counts', fontsize=15)
         ax.grid(alpha=0.5)
-        fig.savefig(fig_slices_name, dpi=300)
+        fig.savefig(fig_name, dpi=300)
+        plt.close(fig)
 
     def save_star_cutout(self, star_id='', x=None, y=None,
                          cutout=None, num_frame=None, filename=''):
@@ -642,7 +638,7 @@ class TimeSeriesAnalysis:
         """
 
         # Output directory for all the cutouts
-        output_directory = os.path.join(self._data_directory, 'Cutouts', star_id)
+        output_directory = Path(f'{self._data_directory}/Cutouts/{star_id}')
         os.makedirs(output_directory, exist_ok=True)
 
         if filename.endswith('.fz'):
@@ -650,8 +646,7 @@ class TimeSeriesAnalysis:
         filename = os.path.splitext(os.path.basename(filename))[0]
 
         # Name of centroid image
-        fig_cutouts_name = os.path.join(output_directory, '{}_{}_{}_centroid.png'.
-                                        format(self.header['INSTRUME'], star_id, filename))
+        fig_name = Path(output_directory, f'{self.instrument}_{star_id}_{filename}_centroid.png')
 
         # Add subplot for normal star
         instrume = self.header['INSTRUME']
@@ -722,7 +717,7 @@ class TimeSeriesAnalysis:
         ax2.set_yticks([])
 
         fig.tight_layout()
-        fig.savefig(fig_cutouts_name)
+        fig.savefig(fig_name)
         plt.close(fig)
 
     @staticmethod
@@ -1260,11 +1255,11 @@ class TimeSeriesAnalysis:
 
         if save_rms:
             # Output directory for files that contain photometric precisions
-            output_directory = self._output_directory + '/rms_precisions'
+            output_directory = Path(f'{self._output_directory}/rms_precisions')
             os.makedirs(output_directory, exist_ok=True)
 
             # File with rms information
-            file_rms_name = os.path.join(output_directory, f'rms_{self.instrument}.txt')
+            file_rms_name = Path(output_directory, f'rms_{self.instrument}.txt')
 
             with open(file_rms_name, 'a') as file:
                 file.write(f"{self.r} {self.std} {self.std_binned} "
@@ -1542,9 +1537,9 @@ class LightCurve(TimeSeriesAnalysis):
         fig = plt.figure(figsize=(6.0, 5.0))
 
         # Name for boxplot.
-        violin_name = os.path.join(self._output_directory, 'Violinplot_cam'
-                                   f'{self.instrument}_rad{self.r}pix_'
-                                   f'{len(self.ref_stars_coordinates_list)}refstar.png')
+        violin_name = Path(self._output_directory,
+                           f'Violinplot_cam_{self.instrument}_rad{self.r}pix'
+                           f'_{len(self.ref_stars_coordinates_list)}refstar.png')
 
         # ax = sns.swarmplot(y=normalized_flux, color=".25", zorder=3)
         if self.transit_times:
@@ -1588,9 +1583,9 @@ class LightCurve(TimeSeriesAnalysis):
             results = self.model_lightcurve(time, flux)
 
             # Name for folded light curve.
-            model_lightcurve_name = os.path.join(self._output_directory, 'Model_lightcurve_cam'
-                                                 f'{self.instrument}_rad{self.r}pix_'
-                                                 f'{len(self.ref_stars_coordinates_list)}refstar.png')
+            model_lightcurve_name = Path(self._output_directory, 'Model_lightcurve_cam'
+                                         f'{self.instrument}_rad{self.r}pix_'
+                                         f'{len(self.ref_stars_coordinates_list)}refstar.png')
 
             loc = plticker.MultipleLocator(base=5)  # this locator puts ticks at regular intervals
 
@@ -1609,9 +1604,9 @@ class LightCurve(TimeSeriesAnalysis):
             print(f'Folded model of the light curve of {self.target_star_id} was plotted\n')
 
             # Name for periodogram.
-            periodogram_name = os.path.join(self._output_directory, 'Periodogram_cam'
-                                            f'{self.instrument}_rad{self.r}pix_'
-                                            f'{len(self.ref_stars_coordinates_list)}refstar.png')
+            periodogram_name = Path(self._output_directory, 'Periodogram_cam'
+                                    f'{self.instrument}_rad{self.r}pix_'
+                                    f'{len(self.ref_stars_coordinates_list)}refstar.png')
 
             fig, ax = plt.subplots(1, 1, figsize=(8.5, 5.0))
             ax.axvline(results.period, alpha=0.4, lw=3)
@@ -1638,9 +1633,9 @@ class LightCurve(TimeSeriesAnalysis):
         std = np.nanstd(flux)
 
         # Name for light curve.
-        lightcurve_name = os.path.join(self._output_directory, 'Lightcurve_cam'
-                                       f'{self.instrument}_rad{self.r}pix_'
-                                       f'{len(self.ref_stars_coordinates_list)}refstar.png')
+        lightcurve_name = Path(self._output_directory, 'Lightcurve_cam'
+                               f'{self.instrument}_rad{self.r}pix_'
+                               f'{len(self.ref_stars_coordinates_list)}refstar.png')
 
         fig, ax = plt.subplots(2, 1,
                                sharey='row', sharex="col", figsize=(8.5, 6.3))
@@ -1706,9 +1701,9 @@ class LightCurve(TimeSeriesAnalysis):
 
         if plot_tracking:
             # Name for plot of tracking.
-            plot_tracking_name = os.path.join(self._output_directory, 'tracking_plot_cam'
-                                              f'{self.instrument}_rad{self.r}pix_'
-                                              f'{len(self.ref_stars_coordinates_list)}refstar.png')
+            plot_tracking_name = Path(self._output_directory, 'tracking_plot_cam'
+                                      f'{self.instrument}_rad{self.r}pix_'
+                                      f'{len(self.ref_stars_coordinates_list)}refstar.png')
 
             fig, ax = plt.subplots(1, 1, figsize=(8.5, 6.3))
             ax.plot(time, self.x_pos_target[~nan_mask][clip_mask], 'ro-',
@@ -1727,9 +1722,9 @@ class LightCurve(TimeSeriesAnalysis):
 
         if plot_noise_sources:
             # Name for plot of noise sources.
-            plot_noise_name = os.path.join(self._output_directory, 'noises_plot_cam'
-                                           f'{self.instrument}_rad{self.r}pix_'
-                                           f'{len(self.ref_stars_coordinates_list)}refstar.png')
+            plot_noise_name = Path(self._output_directory, 'noises_plot_cam'
+                                   f'{self.instrument}_rad{self.r}pix_'
+                                   f'{len(self.ref_stars_coordinates_list)}refstar.png')
 
             fig, ax = plt.subplots(1, 1, sharey="row", sharex="col", figsize=(8.5, 6.3))
             ax.set_title(f'Noise Sources in {self.target_star_id} ' r'($m_\mathrm{V}=10.0$)',
@@ -1846,8 +1841,7 @@ class LightCurve(TimeSeriesAnalysis):
         fig = plt.figure(figsize=(6.0, 5.0))
 
         # Name for boxplot.
-        violin_name = os.path.join(output_directory, 'Violinplot_cam'
-                                   f'{self.telescope}_rad{self.r}pix.png')
+        violin_name = Path(output_directory, f'Violinplot_cam{self.telescope}_rad{self.r}pix.png')
 
         # ax = sns.swarmplot(y=flux, color=".25", zorder=3)
         if self.transit_times:
@@ -1901,8 +1895,8 @@ class LightCurve(TimeSeriesAnalysis):
             results = self.model_lightcurve(time, flux, limb_dc=ab)
 
             # Name for folded light curve.
-            model_lightcurve_name = os.path.join(output_directory, 'Model_lightcurve_cam'
-                                                 f'{self.telescope}_rad{self.r}pix.png')
+            model_lightcurve_name = Path(output_directory, 'Model_lightcurve_cam'
+                                         f'{self.telescope}_rad{self.r}pix.png')
 
             # This locator puts ticks at regular intervals.
             loc = plticker.MultipleLocator(base=5)
@@ -1922,8 +1916,8 @@ class LightCurve(TimeSeriesAnalysis):
             print(f'-------->\tFolded model of the light curve of {star_name} was plotted\n')
 
             # Name for periodogram.
-            periodogram_name = os.path.join(output_directory, 'Periodogram_cam'
-                                            f'{self.telescope}_rad{self.r}pix.png')
+            periodogram_name = Path(output_directory, 'Periodogram_cam'
+                                    f'{self.telescope}_rad{self.r}pix.png')
 
             fig, ax = plt.subplots(1, 1, figsize=(8.5, 5.0))
             ax.axvline(results.period, alpha=0.4, lw=3)
@@ -1945,8 +1939,8 @@ class LightCurve(TimeSeriesAnalysis):
         # Standard deviation in ppm for the observation
         std = np.nanstd(flux)
 
-        lightcurve_name = os.path.join(output_directory, 'Lightcurve_cam'
-                                       f'{self.telescope}_rad{self.r}pix_.png')
+        lightcurve_name = Path(output_directory, 'Lightcurve_cam'
+                               f'{self.telescope}_rad{self.r}pix_.png')
 
         fig, ax = plt.subplots(1, 1,
                                sharey='row', sharex='col', figsize=(8.5, 6.3))
