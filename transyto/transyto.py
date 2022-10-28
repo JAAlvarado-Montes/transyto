@@ -305,7 +305,7 @@ class TimeSeriesAnalysis:
 
             # Refine the name of the target star using the main ID from Simbad
             simbad_result_table = Simbad.query_object(self.target_star_id)
-            self.target_star_id = simbad_result_table["MAIN_ID"][0]
+            self.target_star_id = simbad_result_table['MAIN_ID'][0]
 
             print(f"\n{9 * ' '}\tThe target star was found, {self.pipeline} will proceed"
                   ' with the photometry:\n')
@@ -422,7 +422,7 @@ class TimeSeriesAnalysis:
             target_patches = target_aperture.plot(color='red', lw=1.5, alpha=0.5,
                                                   label=f'Target: {self.target_star_id}')
             ref_patches = ref_apertures.plot(color='blue', lw=1.5, alpha=0.5,
-                                             label="Reference stars")
+                                             label='Reference stars')
 
             handles = (target_patches[0], ref_patches[0])
 
@@ -464,11 +464,11 @@ class TimeSeriesAnalysis:
             target_patches = target_aperture.plot(color='red', lw=1.5, alpha=0.5,
                                                   label=f'Target: {self.target_star_id}')
             ref_patches = ref_apertures.plot(color='blue', lw=1.5, alpha=0.5,
-                                             label="Reference stars")
+                                             label='Reference stars')
 
             handles = (target_patches[0], ref_patches[0])
 
-            plt.legend(ncol=2, loc="upper center", fontsize=8.4, bbox_to_anchor=(0.5, 1.1),
+            plt.legend(ncol=2, loc='upper center', fontsize=8.4, bbox_to_anchor=(0.5, 1.1),
                        fancybox=True, frameon=True, handles=handles, prop={'weight': 'bold'})
             plt.grid(alpha=0.4)
             ax.set_xlabel('X pixels', fontsize=9)
@@ -611,11 +611,11 @@ class TimeSeriesAnalysis:
         plt.title(f'PSF profile of {self.target_star} ' r'($m_\mathrm{V}=10.0$)', fontsize=15)
         ax.plot(pixs, projection_average, 'k-', ms=3)
         # ax.axhline(y=psf_half, xmin=0.36, xmax=0.67, c="r", ls="--", lw=1.5)
-        ax.axvline(x=idx_n, c='b', ls="-.", lw=1.5)
-        ax.axvline(x=idx_p, c='b', ls="-.", lw=1.5)
+        ax.axvline(x=idx_n, c='b', ls='-.', lw=1.5)
+        ax.axvline(x=idx_p, c='b', ls='-.', lw=1.5)
         ax.axvspan(idx_n, idx_p, facecolor='blue', alpha=0.15)
         ax.text(idx_p + 0.4, psf_half, rf'FWHM$\approx${np.max(results_half[0]) / 2:.3f} pix',
-                color="k", fontsize=13)
+                color='k', fontsize=13)
 
         ax.tick_params(axis='both', which='major', labelsize=15)
         ax.set_xlabel('Pixels', fontsize=15)
@@ -704,8 +704,8 @@ class TimeSeriesAnalysis:
         ax.set_ylim((0, 2.25 * self._box_width))
 
         ax1.set_title(f'PSF Model: 2D Gaussian\n\n'
-                      r"FWHM$_{x}$" f'={self.psf_model_x_fwhm:.2f} pixels' '\n'
-                      r"FWHM$_{y}$" f'={self.psf_model_y_fwhm:.2f} pixels' '\n'
+                      r'FWHM$_{x}$' f'={self.psf_model_x_fwhm:.2f} pixels' '\n'
+                      r'FWHM$_{y}$' f'={self.psf_model_y_fwhm:.2f} pixels' '\n'
                       r'FWHM$_\mathrm{mean}$' f'={self.r:.2f} pixels')
         ax1.imshow(self.psf_model(self.x_model, self.y_model), origin="lower",
                    cmap='viridis', norm=norm)
@@ -1084,8 +1084,8 @@ class TimeSeriesAnalysis:
                     masked_data = self._mask_data(cutout_psf)
                     x, y = self._estimate_centroid_via_2dgaussian(cutout_psf, mask=masked_data.mask)
                     positions = Table()
-                    positions["x"] = [x]
-                    positions["y"] = [y]
+                    positions['x'] = [x]
+                    positions['y'] = [y]
 
                     tables.append(positions)
                     nddatas.append(NDData(data=cutout_psf))
@@ -1107,7 +1107,7 @@ class TimeSeriesAnalysis:
                 num_frame = self.fits_files.index(fn) + 1
 
                 # Save cutout
-                self.save_star_cutout(star_id=f"Ref_{ref_index}", x=new_x_cen, y=new_y_cen,
+                self.save_star_cutout(star_id=f'Ref_{ref_index}', x=new_x_cen, y=new_y_cen,
                                       cutout=cutout, num_frame=num_frame, filename=fn)
 
             ref_stars_flux_sec.append(np.asarray(object_counts) / self.exptimes)
@@ -1278,7 +1278,7 @@ class LightCurve(TimeSeriesAnalysis):
 
     def __init__(self, target_star='', data_directory='', search_pattern='*.fit*',
                  from_coordinates=True, ra_target=None, dec_target=None,
-                 transit_times=[], telescope=""):
+                 transit_times=[], telescope=''):
         super(LightCurve, self).__init__(target_star=target_star,
                                          data_directory=data_directory,
                                          search_pattern=search_pattern,
@@ -1382,7 +1382,7 @@ class LightCurve(TimeSeriesAnalysis):
             wl = 3.0 * transit_dur
 
             # Detrend the time series data
-            detrended_flux, _ = flatten(time, flux, return_trend=True, method="biweight",
+            detrended_flux, _ = flatten(time, flux, return_trend=True, method='biweight',
                                         window_length=wl)
 
         return detrended_flux
@@ -1678,7 +1678,7 @@ class LightCurve(TimeSeriesAnalysis):
 
             ax[0].plot(time, ref_star_flux_sec[~nan_mask][clip_mask]
                        / np.nanmean(ref_star_flux_sec[~nan_mask][clip_mask]),
-                       'o', ms=1.3, label=f"Ref. {counter}")
+                       'o', ms=1.3, label=f'Ref. {counter}')
             ax[0].set_ylabel('Relative Flux', fontsize=13)
             # ax[0].set_ylim((0.9, 1.05))
             ax[0].legend(fontsize=8.1, loc='lower left', ncol=len(self.ref_stars_coordinates_list),
@@ -1720,7 +1720,7 @@ class LightCurve(TimeSeriesAnalysis):
             ax.set_title(f'Tracking of camera {self.instrument}', fontsize=13)
             # ax.xaxis.set_major_locator(loc)
             ax.xaxis.set_major_formatter(plticker.FormatStrFormatter('%.3f'))
-            ax.set_xlabel(f"Time [BJD-{self.time_norm_factor}]", fontsize=13)
+            ax.set_xlabel(f'Time [BJD-{self.time_norm_factor}]', fontsize=13)
             plt.xticks(rotation=30, size=8.0)
             plt.grid(alpha=0.4)
             fig.savefig(plot_tracking_name, dpi=300)
@@ -1876,7 +1876,7 @@ class LightCurve(TimeSeriesAnalysis):
         ax.set_ylabel('Relative flux', fontsize=11)
 
         ax.set_axisbelow(True)
-        ax.grid(axis="y", alpha=0.4)
+        ax.grid(axis='y', alpha=0.4)
 
         fig.savefig(violin_name, dpi=300)
         plt.close(fig)
@@ -1978,7 +1978,7 @@ class LightCurve(TimeSeriesAnalysis):
         # Plot the ingress, mid-transit, and egress times.
         if self.transit_times:
             ax.axvline(ingress, c='k', ls='--', alpha=0.5)
-            ax.axvline(mid_transit, c="k", ls="--", alpha=0.5)
+            ax.axvline(mid_transit, c='k', ls="--", alpha=0.5)
             ax.axvline(egress, c='k', ls='--', alpha=0.5)
 
         ax.xaxis.set_major_formatter(plticker.FormatStrFormatter('%.2f'))
