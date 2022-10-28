@@ -257,9 +257,6 @@ class TimeSeriesAnalysis:
         return cutout
 
     def _mask_noise(self, data, noise_mean, noise_std, threshold_sigma=3.0):
-        # threshold = np.median(image - (sigma * np.std(image)))
-        # masked_image = ma.masked_values(image, threshold)
-
         mask = data < (noise_mean + threshold_sigma * noise_std)
 
         return mask
@@ -645,7 +642,7 @@ class TimeSeriesAnalysis:
         """
 
         # Output directory for all the cutouts
-        output_directory = f'{self._data_directory}{star_id}_Cutouts'
+        output_directory = os.path.join(self._data_directory, 'Cutouts', star_id)
         os.makedirs(output_directory, exist_ok=True)
 
         if filename.endswith('.fz'):
