@@ -649,9 +649,8 @@ class TimeSeriesAnalysis:
         fig_name = Path(output_directory, f'{self.instrument}_{star_id}_{filename}_centroid.png')
 
         # Add subplot for normal star
-        instrume = self.header['INSTRUME']
         fig, (ax, ax1, ax2) = plt.subplots(1, 3, figsize=(9, 5.5))
-        fig.suptitle(f'Huntsman Camera {instrume}\n'
+        fig.suptitle(f'Huntsman Camera {self.instrument}\n'
                      f'Star {star_id} (frame {num_frame})', fontsize=15, y=0.995)
         ax.set_title('Photometry Data\n\n'
                      r'$r_\mathrm{inner\_aperture}$=1 x FWHM$_\mathrm{mean}$' '\n'
@@ -968,7 +967,7 @@ class TimeSeriesAnalysis:
                 continue
 
         if make_effective_psf:
-            print(f"Building effective PSF for target star {self.target_star}")
+            print(f'Building effective PSF for target star {self.target_star}')
             self.make_effective_psf(nddatas, tables)
 
         self.exptimes = np.asarray(exptimes)
@@ -1262,7 +1261,7 @@ class TimeSeriesAnalysis:
             file_rms_name = Path(output_directory, f'rms_{self.instrument}.txt')
 
             with open(file_rms_name, 'a') as file:
-                file.write(f"{self.r} {self.std} {self.std_binned} "
+                file.write(f'{self.r} {self.std} {self.std_binned} '
                            f'{np.nanmedian(S_to_N_obj)} {np.nanmedian(self.S_to_N_ref)} '
                            f'{np.nanmedian(S_to_N_diff)}\n')
 
@@ -1430,7 +1429,7 @@ class LightCurve(TimeSeriesAnalysis):
         print(f"{8 * ' '}\t • Best duration (days): {results.duration: .5f}")
         print(f"{8 * ' '}\t • Signal detection efficiency (SDE): {results.SDE}\n")
 
-        print("-------->\tFinished model of light curve. Plotting model...\n")
+        print('-------->\tFinished model of light curve. Plotting model...\n')
 
         return results
 
