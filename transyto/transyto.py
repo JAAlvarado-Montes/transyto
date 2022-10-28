@@ -672,8 +672,13 @@ class TimeSeriesAnalysis:
                      f"{self.r_in / self.r:.0f} x " r"$r_\mathrm{inner\_aperture}$" "\n"
                      r"$r_\mathrm{outer\_annulus}$="
                      f"{self.r_out / self.r:.0f} x " r"$r_\mathrm{inner\_aperture}$")
-        norm = simple_norm(cutout, "sqrt", percent=99.7)
-        norm_box = simple_norm(self.new_cutout, "sqrt", percent=99.7)
+
+        # Create norm for visualization
+        norm = simple_norm(self.new_cutout, "sqrt", percent=99.7)
+
+        # Calculate the residuals
+        residuals = self.new_cutout - self.psf_model(self.x_model, self.y_model)
+
         ax.imshow(cutout, origin="lower", cmap="viridis", norm=norm)
         ax.scatter(x, y, c='k', marker='+', s=100)
 
@@ -711,15 +716,14 @@ class TimeSeriesAnalysis:
                       r"FWHM$_{y}$" f"={self.psf_model_y_fwhm:.2f} pixels" "\n"
                       r"FWHM$_\mathrm{mean}$" f"={self.r:.2f} pixels")
         ax1.imshow(self.psf_model(self.x_model, self.y_model), origin="lower",
-                   cmap="viridis", norm=norm_box)
+                   cmap="viridis", norm=norm)
         ax1.tick_params(axis="both", which="major", labelsize=15)
         ax1.yaxis.set_ticks_position('none')
         ax1.set_xticks([])
         ax1.set_yticks([])
 
         ax2.set_title("Residuals")
-        ax2.imshow(self.new_cutout - self.psf_model(self.x_model, self.y_model), origin="lower",
-                   cmap="viridis", norm=norm_box)
+        ax2.imshow(residuals, origin="lower", cmap="viridis", norm=norm)
         ax2.tick_params(axis="both", which="major", labelsize=15)
         ax2.yaxis.set_ticks_position('none')
         ax2.set_xticks([])
