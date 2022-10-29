@@ -76,7 +76,7 @@ class TimeSeriesAnalysis:
 
     def __init__(self, target_star='', data_directory='', search_pattern='*fit*',
                  from_coordinates=None, ra_target=None, dec_target=None,
-                 transit_times=[], telescope=''):
+                 transit_times=[], telescope='', centroid_box=30):
         """Initialize class Photometry for a given target and reference stars.
 
         Parameters
@@ -98,6 +98,8 @@ class TimeSeriesAnalysis:
             Example: ["2021-07-27T15:42:00", "2021-07-27T17:06:00", "2021-07-27T18:29:00"]
         telescope : str, optional
             Name of the telescope where the data come from.
+        centroid_box : int, optional
+            Initial box to calculate centroid.
         """
 
         # Name of target star and number of reference stars to be used.
@@ -132,6 +134,9 @@ class TimeSeriesAnalysis:
             self._from_coordinates = True
         else:
             self._from_coordinates = False
+
+        # Initial box to slice data and calculate centroid
+        self._initial_centroid_box = centroid_box
 
         # Output directory for logs
         if self._data_directory:
@@ -681,8 +686,7 @@ class TimeSeriesAnalysis:
         xs = np.outer(radii, np.cos(theta))
         ys = np.outer(radii, np.sin(theta))
 
-        # in order to have a closed area, the circles
-        # should be traversed in opposite directions
+        # in order to have a closed area, the circles should be traversed in opposite directions
         xs[1, :] = xs[1, ::-1]
         ys[1, :] = ys[1, ::-1]
 
@@ -851,7 +855,7 @@ class TimeSeriesAnalysis:
             self.header = get_header(fn)
 
             # Centroid box width for initial centroid function.
-            self._box_width = 50.
+            self._centroid_box = self._initial_centroid_box
 
             wcs = WCS(self.header)
             # Check if WCS exist in image
@@ -862,7 +866,7 @@ class TimeSeriesAnalysis:
                                               self.target_star_coord.dec, 0)
 
                 # Do a first cutout to refine the centroid of the target star.
-                first_cutout = self._slice_data(data, center_yx, self._box_width)
+                first_cutout = self._slice_data(data, center_yx, self._centroid_box)
 
                 # Set the sigma clipping algorithm to mask pixels of the local noise level.
                 sigclip = SigmaClip(sigma=3.0, maxiters=50)
@@ -880,7 +884,7 @@ class TimeSeriesAnalysis:
                                                    method='2dgaussian')
 
                 # Create a new cutout around the new centroid to model the PSF of the target star.
-                self.new_cutout = self._slice_data(data, (y_cen, x_cen), self._box_width)
+                self.new_cutout = self._slice_data(data, (y_cen, x_cen), self._centroid_box)
 
                 # Get the dimensions of the new cutout.
                 yp, xp = self.new_cutout.shape
@@ -907,7 +911,7 @@ class TimeSeriesAnalysis:
                 self.r_in = 3. * self.r
                 self.r_out = 5. * self.r
                 # Redefine the box_width to extract a cutout that can be used as a diagnosis plot.
-                self._box_width = self.r_out + 0.5
+                self._centroid_box = self.r_out + 0.5
 
                 # Get the exposure time and airmass for the current frame.
                 exptimes.append(self.exptime)
@@ -944,10 +948,10 @@ class TimeSeriesAnalysis:
                     nddatas.append(NDData(data=cutout_psf))
 
                 # Make a bigger cutout to include both apertures: star and local background.
-                cutout = self._slice_data(data, (y_cen, x_cen), 2.3 * self._box_width)
+                cutout = self._slice_data(data, (y_cen, x_cen), 2.3 * self._centroid_box)
 
                 # Find a rough center of the cutout.
-                mid_point = self._box_width / 2.
+                mid_point = self._centroid_box / 2.
                 x_cen, y_cen = 2.3 * mid_point, 2.3 * mid_point
 
                 # Filter and choose the pixels only in the middle region of the cutout.
@@ -1013,7 +1017,7 @@ class TimeSeriesAnalysis:
                 self.header = get_header(fn)
 
                 # Centroid box width for initial centroid function.
-                self._box_width = 50.
+                self._centroid_box = self._initial_centroid_box
 
                 wcs = WCS(self.header)
 
@@ -1021,7 +1025,7 @@ class TimeSeriesAnalysis:
                 center_yx = wcs.all_world2pix(star.ra, star.dec, 0)
 
                 # Do a first cutout to refine the centroid of each reference star.
-                first_cutout = self._slice_data(data, center_yx, self._box_width)
+                first_cutout = self._slice_data(data, center_yx, self._centroid_box)
 
                 # Set the sigma clipping algorithm to mask pixels of the local noise level.
                 sigclip = SigmaClip(sigma=3.0, maxiters=50)
@@ -1039,7 +1043,7 @@ class TimeSeriesAnalysis:
                                                    method='2dgaussian')
 
                 # Create new cutout to calculate the FWHM by doing a 2D Gaussian fit to the PSF.
-                self.new_cutout = self._slice_data(data, (y_cen, x_cen), self._box_width)
+                self.new_cutout = self._slice_data(data, (y_cen, x_cen), self._centroid_box)
 
                 yp, xp = self.new_cutout.shape
 
@@ -1060,7 +1064,7 @@ class TimeSeriesAnalysis:
                 self.r = 1. * (self.psf_model_x_fwhm + self.psf_model_y_fwhm) / 2.
                 self.r_in = 3. * self.r
                 self.r_out = 5. * self.r
-                self._box_width = self.r_out + 0.5
+                self._centroid_box = self.r_out + 0.5
 
                 # Sum of counts inside aperture
                 (counts_in_aperture,
@@ -1085,10 +1089,10 @@ class TimeSeriesAnalysis:
                     nddatas.append(NDData(data=cutout_psf))
 
                 # Make a bigger cutout to include both apertures: star and local background.
-                cutout = self._slice_data(data, (y_cen, x_cen), 2.3 * self._box_width)
+                cutout = self._slice_data(data, (y_cen, x_cen), 2.3 * self._centroid_box)
 
                 # Find a rough center of the cutout.
-                mid_point = self._box_width / 2.
+                mid_point = self._centroid_box / 2.
                 x_cen, y_cen = 2.3 * mid_point, 2.3 * mid_point
 
                 # Filter and choose the pixels only in the middle region of the cutout.

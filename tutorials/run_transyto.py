@@ -15,6 +15,9 @@ target_name = 'Wasp-50'
 target_ra = None
 target_dec = None
 
+# Box to calculate centroid
+centroid_box = 40.
+
 # Transit times: ingress, mid-transit, and egress.
 # transit_times = ["2021-07-27T15:42:00", "2021-07-27T17:06:00", "2021-07-27T18:29:00"]
 transit_times = []
@@ -44,6 +47,9 @@ if __name__ == '__main__':
     parser.add_argument('--dec-target', dest='dec_target',
                         help='DEC of target', type=float,
                         default=target_dec)
+    parser.add_argument('--centroid-box', dest='centroid_box',
+                        help='Box to calculate centroid', type=int,
+                        default=centroid_box)
     parser.add_argument('--transit-times', dest='transit_times',
                         help='Transit times of target star', type=list,
                         default=transit_times)
