@@ -207,8 +207,6 @@ class TimeSeriesAnalysis:
     def keyword_list(self):
         file = str(Path(__file__).parents[1]) + '/' + 'telescope_keywords.csv'
 
-        telescope = self.telescope
-
         (Huntsman,
          MQ,
          TESS,
@@ -217,17 +215,17 @@ class TimeSeriesAnalysis:
          POCS) = np.loadtxt(file, skiprows=1, delimiter=';', dtype=str,
                             usecols=(0, 1, 2, 3, 4, 5), unpack=True)
 
-        if telescope == 'Huntsman':
+        if self.telescope == 'Huntsman':
             kw_list = Huntsman
-        elif telescope == 'MQ':
+        elif self.telescope == 'MQ':
             kw_list = MQ
-        elif telescope == 'TESS':
+        elif self.telescope == 'TESS':
             kw_list = TESS
-        elif telescope == 'WASP':
+        elif self.telescope == 'WASP':
             kw_list = WASP
-        elif telescope == 'MEARTH':
+        elif self.telescope == 'MEARTH':
             kw_list = MEARTH
-        elif telescope == 'POCS':
+        elif self.telescope == 'POCS':
             kw_list = POCS
 
         return kw_list
@@ -283,17 +281,13 @@ class TimeSeriesAnalysis:
         x, y = centroid_com(data, mask=mask)
         return x, y
 
-    # Using the 'def' function to define the Gaussian Equation
-    def Gauss(x, A, B, mi, sig):
-        y = A * np.exp(-1 * B * (x - mi)**2 / (2 * sig**2))
-        return y
-
     def _find_target_star(self):
         """Find the target star
         """
+        # Get coordinates of target star as given by user (if any).
         if self._from_coordinates:
-            self.target_star_coord = SkyCoord(self.ra_target, self.dec_target,
-                                              unit='deg', frame='icrs')
+            self.target_star_coord = SkyCoord(self.ra_target, self.dec_target, frame='icrs')
+        # Get coordinates of target star using its name.
         else:
             while True:
                 try:
@@ -304,12 +298,22 @@ class TimeSeriesAnalysis:
                     continue
                 break
 
-            # Refine the name of the target star using the main ID from Simbad
-            simbad_result_table = Simbad.query_object(self.target_star_id)
-            self.target_star_id = simbad_result_table['MAIN_ID'][0]
+        # Convert target star coordinates to 'hmsdms' format.
+        self.target_star_coord = self.target_star_coord.to_string('hmsdms')
 
-            print(f"\n{9 * ' '}\tThe target star was found, {self.pipeline} will proceed"
-                  ' with the photometry:\n')
+        # Split coordinates string to get RA and DEC by separate.
+        self.target_star_coord = self.target_star_coord.split(' ')
+
+        # Get RA and DEC from list
+        self.target_star_coord_ra = self.target_star_coord[0]
+        self.target_star_coord_dec = self.target_star_coord[1]
+
+        # Refine the name of the target star using the main ID from Simbad
+        simbad_result_table = Simbad.query_object(self.target_star_id)
+        self.target_star_id = simbad_result_table['MAIN_ID'][0]
+
+        print(f"\n{9 * ' '}\tThe target star was found, {self.pipeline} will proceed"
+              ' with the photometry:\n')
 
     def _find_ref_stars_coordinates(self):
         """Get all data from plate-solved images (right ascention,
@@ -327,11 +331,15 @@ class TimeSeriesAnalysis:
         # Check if WCS exist in image
         if wcs.is_celestial:
 
-            # Star pixel positions in the image
-            center_yx = wcs.all_world2pix(self.target_star_coord.ra, self.target_star_coord.dec, 0)
+            # Build SkyCoord object for target star.
+            target_star = SkyCoord(self.target_star_coord_ra,
+                                   self.target_star_coord_dec, frame='icrs')
+
+            # Target star pixel positions in the image
+            center_yx = wcs.all_world2pix(target_star.ra, target_star.dec, 0)
 
             # Slice the data to mask the target from DAOSTAR algorithm
-            cutout = self._slice_data(data, center_yx, self._box_width)
+            cutout = self._slice_data(data, center_yx, self._centroid_box)
 
             # Set sigma clipping algorithm
             sigclip = SigmaClip(sigma=3.0, maxiters=50)
@@ -349,8 +357,10 @@ class TimeSeriesAnalysis:
 
             # Create the mask that will be used to remove the target from DAOSTAR algorithm.
             target_mask = np.zeros(data.shape, dtype=bool)
-            target_mask[np.int(x_cen - self._box_width / 2.):np.int(x_cen + self._box_width / 2.),
-                        np.int(y_cen - self._box_width / 2.):np.int(y_cen + self._box_width / 2.)] = True
+            target_mask[np.int(x_cen - self._centroid_box / 2.):
+                        np.int(x_cen + self._centroid_box / 2.),
+                        np.int(y_cen - self._centroid_box / 2.):
+                        np.int(y_cen + self._centroid_box / 2.)] = True
 
             # We clipped and clean the background to leave the stars only
             mean, median, std = sigma_clipped_stats(data, sigma=3.0)
@@ -493,8 +503,8 @@ class TimeSeriesAnalysis:
                 x_cen, y_cen = self._estimate_centroid_via_moments(data, mask)
 
             # Compute the shifts in y and x.
-            shift_y = self._box_width / 2 - y_cen
-            shift_x = self._box_width / 2 - x_cen
+            shift_y = self._centroid_box / 2 - y_cen
+            shift_x = self._centroid_box / 2 - x_cen
 
             if shift_y < 0 and shift_x < 0:
                 new_y = prior_y + np.abs(shift_y)
@@ -624,21 +634,25 @@ class TimeSeriesAnalysis:
         fig.savefig(fig_name, dpi=300)
         plt.close(fig)
 
-    def save_star_cutout(self, star_id='', x=None, y=None,
+    def save_star_cutout(self, star_id='', star_ra='', star_dec='', x=None, y=None,
                          cutout=None, num_frame=None, filename=''):
         """Save cutouts of a given star
 
         Parameters
         ----------
-        star_id: str
+        star_id: str, optional
             Name of star to do the cutout.
-        x : float
+        star_ra: str, optional
+            RA of star.
+        star_dec: str, optional
+            DEC of star.
+        x : float, optional
             x-position of centroid.
-        y : float
+        y : float, optional
             y-position of centroid.
-        cutout : array
+        cutout : array, optional
             Cutout of the image.
-        filename : str
+        filename : str, optional
             Name of file.
         """
 
@@ -655,8 +669,8 @@ class TimeSeriesAnalysis:
 
         # Add subplot for normal star
         fig, (ax, ax1, ax2) = plt.subplots(1, 3, figsize=(9, 5.5))
-        fig.suptitle(f'Huntsman Camera {self.instrument}\n'
-                     f'Star {star_id} (frame {num_frame})', fontsize=15, y=0.995)
+        fig.suptitle(f'Huntsman Camera {self.instrument} (frame {num_frame})\n'
+                     f'Star {star_id}, RA: {star_ra}, DEC: {star_dec}', fontsize=15, y=0.995)
         ax.set_title('Photometry Data\n\n'
                      r'$r_\mathrm{inner\_aperture}$=1 x FWHM$_\mathrm{mean}$' '\n'
                      r'$r_\mathrm{inner\_annulus}$='
@@ -698,8 +712,8 @@ class TimeSeriesAnalysis:
         ax.add_patch(circ2)
         ax.set_xlabel('X Pixels', fontsize=15)
         ax.set_ylabel('Y Pixels', fontsize=15)
-        ax.set_xlim((0, 2.25 * self._box_width))
-        ax.set_ylim((0, 2.25 * self._box_width))
+        ax.set_xlim((0, 2.25 * self._centroid_box))
+        ax.set_ylim((0, 2.25 * self._centroid_box))
 
         ax1.set_title(f'PSF Model: 2D Gaussian\n\n'
                       r'FWHM$_{x}$' f'={self.psf_model_x_fwhm:.2f} pixels' '\n'
@@ -861,9 +875,12 @@ class TimeSeriesAnalysis:
             # Check if WCS exist in image
             if wcs.is_celestial:
 
+                # Build SkyCoord object for target star.
+                target_star = SkyCoord(self.target_star_coord_ra,
+                                       self.target_star_coord_dec, frame='icrs')
+
                 # Get the initial  (x, y) positions of the target star in the image.
-                center_yx = wcs.all_world2pix(self.target_star_coord.ra,
-                                              self.target_star_coord.dec, 0)
+                center_yx = wcs.all_world2pix(target_star.ra, target_star.dec, 0)
 
                 # Do a first cutout to refine the centroid of the target star.
                 first_cutout = self._slice_data(data, center_yx, self._centroid_box)
@@ -964,7 +981,8 @@ class TimeSeriesAnalysis:
                 num_frame = self.fits_files.index(fn) + 1
 
                 # Save cutout
-                self.save_star_cutout(star_id=self.target_star_id, x=new_x_cen, y=new_y_cen,
+                self.save_star_cutout(star_id=self.target_star_id, star_ra=self.target_star_coord_ra,
+                                      star_dec=self.target_star_coord_dec, x=new_x_cen, y=new_y_cen,
                                       cutout=cutout, num_frame=num_frame, filename=fn)
 
             else:
@@ -1106,7 +1124,8 @@ class TimeSeriesAnalysis:
 
                 # Save cutout
                 self.save_star_cutout(star_id=f'Ref_{ref_index}', x=new_x_cen, y=new_y_cen,
-                                      cutout=cutout, num_frame=num_frame, filename=fn)
+                                      cutout=cutout, num_frame=num_frame, filename=fn,
+                                      star_ra=ref_star_ra, star_dec=ref_star_dec)
 
             ref_stars_flux_sec.append(np.asarray(object_counts) / self.exptimes)
             ref_stars_background_sec.append(np.asarray(background_in_object) / self.exptimes)
@@ -1276,7 +1295,7 @@ class LightCurve(TimeSeriesAnalysis):
 
     def __init__(self, target_star='', data_directory='', search_pattern='*.fit*',
                  from_coordinates=True, ra_target=None, dec_target=None,
-                 transit_times=[], telescope=''):
+                 transit_times=[], telescope='', centroid_box=30):
         super(LightCurve, self).__init__(target_star=target_star,
                                          data_directory=data_directory,
                                          search_pattern=search_pattern,
@@ -1284,7 +1303,8 @@ class LightCurve(TimeSeriesAnalysis):
                                          ra_target=ra_target,
                                          dec_target=dec_target,
                                          transit_times=transit_times,
-                                         telescope=telescope)
+                                         telescope=telescope,
+                                         centroid_box=centroid_box)
 
     def clip_outliers(self, flux, sigma_lower=0, sigma_upper=0, **kwargs):
         """Clips out the outliers in flux.
