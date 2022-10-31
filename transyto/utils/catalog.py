@@ -3,8 +3,8 @@ from contextlib import suppress
 import requests
 
 
-planeturl = "https://exo.mast.stsci.edu/api/v0.1/exoplanets/"
-dvurl = "https://exo.mast.stsci.edu/api/v0.1/dvdata/tess/"
+planeturl = 'https://exo.mast.stsci.edu/api/v0.1/exoplanets/'
+dvurl = 'https://exo.mast.stsci.edu/api/v0.1/dvdata/tess/'
 header = {}
 
 
@@ -29,7 +29,7 @@ class StarData:
         ------------------
         """
 
-        url = planeturl + f"{self.star_id} b" + "/properties/"
+        url = planeturl + f'{self.star_id} b' + '/properties/'
 
         r = requests.get(url=url, headers=header)
 

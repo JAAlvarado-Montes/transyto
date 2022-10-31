@@ -58,7 +58,7 @@ def fpack(fits_fname, unpack=False, verbose=False):
         str: Filename of compressed/decompressed file.
     """
     assert os.path.exists(fits_fname), warn(
-        "No file exists at: {}".format(fits_fname))
+        'No file exists at: {}'.format(fits_fname))
 
     if unpack:
         fpack = shutil.which('funpack')
@@ -72,11 +72,11 @@ def fpack(fits_fname, unpack=False, verbose=False):
     try:
         assert fpack is not None
     except AssertionError:
-        warn("fpack not found (try installing cfitsio). File has not been changed")
+        warn('fpack not found (try installing cfitsio). File has not been changed')
         return fits_fname
 
     if verbose:
-        print("fpack command: {}".format(cmd))
+        print('fpack command: {}'.format(cmd))
 
     subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
 
@@ -178,6 +178,6 @@ def set_xaxis_limits(ax, ax1):
 def logged(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        print(func.__name__ + " was called")
+        print(func.__name__ + ' was called')
         return func(*args, **kwargs)
     return wrapper

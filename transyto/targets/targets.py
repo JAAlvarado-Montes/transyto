@@ -23,10 +23,10 @@ from transyto.targets.swarthmore import configure_transit_finder, find_observato
 from transyto.utils import set_xaxis_limits
 
 
-def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
+def filter_transit_observations(observatory='', utc_offset=0, cov_threshold=80,
                                 days_to_print=5, days_in_past=0, save_tables=False,
-                                output_directory="./", starting_date="today", min_start_elevation=30,
-                                elevation_conector="or", min_end_elevation=30, min_transit_depth=5,
+                                output_directory='./', starting_date='today', min_start_elevation=30,
+                                elevation_conector='or', min_end_elevation=30, min_transit_depth=5,
                                 max_magnitude=11):
     """Filter and plot transits for a given observatory using different criteria (see below).
 
@@ -68,7 +68,7 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
     else:
         observatory_name = observatory
 
-    print(f"\nDownloading CSV tables for exoplanets and tois, using the variables:\n {locals()}\n")
+    print(f'\nDownloading CSV tables for exoplanets and tois, using the variables:\n {locals()}\n')
 
     planets_file = configure_transit_finder(days_to_print=days_to_print,
                                             days_in_past=days_in_past, starting_date=starting_date,
@@ -78,7 +78,7 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
                                             min_transit_depth=min_transit_depth,
                                             max_magnitude=max_magnitude,
                                             observatory=observatory_name,
-                                            database="exoplanets", )
+                                            database='exoplanets', )
 
     tois_file = configure_transit_finder(days_to_print=days_to_print,
                                          days_in_past=days_in_past, starting_date=starting_date,
@@ -88,15 +88,15 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
                                          min_transit_depth=min_transit_depth,
                                          max_magnitude=max_magnitude,
                                          observatory=observatory_name,
-                                         database="tois")
+                                         database='tois')
 
     # Check if output directory was provided and if not then ask for path.
     if output_directory:
-        output_directory = os.path.join(output_directory, "filtered_transits")
+        output_directory = os.path.join(output_directory, 'filtered_transits')
 
     else:
-        output_directory = input("Enter the output directory: ")
-        output_directory = os.path.join(output_directory, "Visibility_plots")
+        output_directory = input('Enter the output directory: ')
+        output_directory = os.path.join(output_directory, 'Visibility_plots')
 
     # Create the output directory for tables and plots.
     os.makedirs(output_directory, exist_ok=True)
@@ -105,13 +105,13 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
         r_exo = requests.get(planets_file, allow_redirects=True)
         r_toi = requests.get(tois_file, allow_redirects=True)
 
-        planets_file = os.path.join(output_directory, "exoplanets.csv")
-        tois_file = os.path.join(output_directory, "tois.csv")
+        planets_file = os.path.join(output_directory, 'exoplanets.csv')
+        tois_file = os.path.join(output_directory, 'tois.csv')
 
-        with open(planets_file, "wb") as file:
+        with open(planets_file, 'wb') as file:
             file.write(r_exo.content)
 
-        with open(tois_file, "wb") as file:
+        with open(tois_file, 'wb') as file:
             file.write(r_toi.content)
 
     exop_df = pd.read_csv(planets_file, delimiter=",")
@@ -135,13 +135,13 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
     big_df['new_end_date'] = pd.to_datetime(big_df['end time']).dt.date
 
     transit_groups = big_df.sort_values(by='percent_baseline_observable',
-                                        ascending=False).groupby("new_end_date")
+                                        ascending=False).groupby('new_end_date')
 
     dates = []
     for date, name in transit_groups:
         dates.append(date)
 
-    parameters = {"axes.labelsize": 14, "xtick.labelsize": 12, "ytick.labelsize": 12}
+    parameters = {'axes.labelsize': 14, 'xtick.labelsize': 12, 'ytick.labelsize': 12}
     plt.rcParams.update(parameters)
 
     # Get the available observatories that can selected by name.
@@ -152,8 +152,8 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
 
         sim_ratios = []
         for def_loc in defined_locations:
-            ratio = SequenceMatcher(None, def_loc.replace("Observatory", ""),
-                                    observatory_name.replace("Observatory", "")).ratio()
+            ratio = SequenceMatcher(None, def_loc.replace('Observatory', ''),
+                                    observatory_name.replace('Observatory', '')).ratio()
             sim_ratios.append(ratio)
 
         # obs_idx = np.where(np.array(sim_ratios) >= 0.6)[0][0]
@@ -199,20 +199,20 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
         good_transits = []
 
         # Calculate the time for midnight.
-        midnight = observatory.midnight(Time(f"{date} 23:59:59", scale="utc", format="iso"), which="nearest")
+        midnight = observatory.midnight(Time(f'{date} 23:59:59', scale='utc', format='iso'), which='nearest')
 
         for (start_date, end_date, start_time, end_time, name, coord,
                 perc, depth, duration, period, mag, toi) in zip(start_dates, end_dates, start_times,
                                                                 end_times, target_names, coords,
                                                                 perc_baselines, depths, durations,
                                                                 periods, mags, toi_names):
-            obs_time = Time(f"{start_date} {start_time}", scale="utc", format="iso")
-            end_time = Time(f"{end_date} {end_time}", scale="utc", format="iso")
+            obs_time = Time(f'{start_date} {start_time}', scale='utc', format='iso')
+            end_time = Time(f'{end_date} {end_time}', scale='utc', format='iso')
 
             # Select only the targets whose start and end observation time are in between evening
             # and morning nautical twilight.
-            if (obs_time.jd >= observatory.twilight_evening_nautical(midnight, which="previous").to_value(format="jd") - 0.2
-                    and end_time.jd <= observatory.twilight_morning_nautical(midnight, which="next").to_value(format="jd") + 0.2):
+            if (obs_time.jd >= observatory.twilight_evening_nautical(midnight, which='previous').to_value(format='jd') - 0.2
+                    and end_time.jd <= observatory.twilight_morning_nautical(midnight, which='next').to_value(format='jd') + 0.2):
 
                 with suppress(ValueError):
                     ra, dec = coord.rsplit()
@@ -242,17 +242,17 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
                         color = next(colors)
 
                         # Modify the label name according to candidates (tois) and exoplanets.
-                        obj_label = f"{name}"
-                        mag_label = "V"
+                        obj_label = f'{name}'
+                        mag_label = 'V'
                         if not pd.isnull(toi):
-                            obj_label = f"toi {toi}"
-                            mag_label = "T"
+                            obj_label = f'toi {toi}'
+                            mag_label = 'T'
 
                         print(obj_label, obs_time, end_time)
 
                         # Append al collected data to be used in the table of each plot.
-                        data.append((perc, f"{mag_label} {mag:.1f}", duration, depth * 1000,
-                                     f"{period:.3f}", ra, dec))
+                        data.append((perc, f'{mag_label} {mag:.1f}', duration, f'{depth * 1000:.1f}',
+                                     f'{period:.3f}', ra, dec))
                         row_labels.append(obj_label)
                         row_colors.append(color)
 
@@ -264,7 +264,7 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
                                              name=obj_label)
 
                         # Plot the airmass of each target, showing altitude and twilight shading.
-                        guide_style = {'color': color, 'linewidth': 1.7, "tz": "UTC"}
+                        guide_style = {'color': color, 'linewidth': 1.7, 'tz': 'UTC'}
 
                         plot_airmass(target, observatory, obs_time, ax=ax, brightness_shading=True,
                                      altitude_yaxis=True, style_kwargs=guide_style)
@@ -273,20 +273,20 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
                         airmass_start = observatory.altaz(obs_time, target).secz
                         airmass_end = observatory.altaz(end_time, target).secz
 
-                        ax.plot_date(obs_time.plot_date, airmass_start, ls="", marker="o",
+                        ax.plot_date(obs_time.plot_date, airmass_start, ls='', marker='o',
                                      ms=5.5, c=color, zorder=3)
-                        ax.plot_date(end_time.plot_date, airmass_end, ls="", marker="o",
+                        ax.plot_date(end_time.plot_date, airmass_end, ls='', marker='o',
                                      ms=5.5, c=color, zorder=3)
                     else:
                         continue
             else:
                 continue
 
-            ax.set_xlabel(f"Starting Night {start_date} [UTC]", labelpad=8)
+            ax.set_xlabel(f'Starting Night {start_date} [UTC]', labelpad=8)
 
         # Define all the properties for the table and build the table for each date.
-        colLabels = ("Coverage [%]", "mag", r"$\Delta t$ [h:m]", r"$\delta$ [ppm]",
-                     r"$P_\mathrm{orb}$ [d]", "RA", "Dec")
+        colLabels = ('Coverage [%]', 'mag', r'$\Delta t$ [h:m]', r'$\delta$ [ppm]',
+                     r'$P_\mathrm{orb}$ [d]', 'RA', 'Dec')
         col_colors = plt.cm.BuPu(np.full(len(colLabels), 0.1))
 
         the_table = ax.table(cellText=data, rowLoc='right', rowColours=row_colors,
@@ -307,17 +307,17 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
         # midnight = observatory.midnight(obs_time)
 
         # Calculate the time of evening and morning twilight.
-        evening_twilight = observatory.twilight_evening_nautical(midnight, which="previous")
-        morning_twilight = observatory.twilight_morning_nautical(midnight, which="next")
+        evening_twilight = observatory.twilight_evening_nautical(midnight, which='previous')
+        morning_twilight = observatory.twilight_morning_nautical(midnight, which='next')
 
         # Calculate the altitude of the moon from evening to morning twilight.
-        moon_time_vector = np.arange(evening_twilight.to_value(format="plot_date"),
-                                     morning_twilight.to_value(format="plot_date"), 0.022)
+        moon_time_vector = np.arange(evening_twilight.to_value(format='plot_date'),
+                                     morning_twilight.to_value(format='plot_date'), 0.022)
 
         # Get the moon's altitude, longitude, and airmass.
-        altaz_moon = observatory.moon_altaz(Time(moon_time_vector, format="plot_date", scale="utc"))
+        altaz_moon = observatory.moon_altaz(Time(moon_time_vector, format='plot_date', scale='utc'))
 
-        moon_illum = observatory.moon_illumination(Time(moon_time_vector, format="plot_date"))
+        moon_illum = observatory.moon_illumination(Time(moon_time_vector, format='plot_date'))
 
         moon_phase = observatory.moon_phase(midnight).value
 
@@ -330,66 +330,66 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
         moon_illum_mean = np.nanmean(moon_illuminations) * 100
 
         if 0 <= moon_phase < 0.4:
-            moon_s = "$\u25EF$"
+            moon_s = '$\u25EF$'
             lw = 0.1
 
         if 0.4 <= moon_phase < 0.8:
-            moon_s = "$\u274D$"
+            moon_s = '$\u274D$'
             lw = 1.0
 
         if 0.8 <= moon_phase < 1.2:
-            moon_s = "$\u263D$"
+            moon_s = '$\u263D$'
             lw = 1.2
 
         if 1.2 <= moon_phase < 1.6:
-            moon_s = "$\u25D1$"
+            moon_s = '$\u25D1$'
             lw = 0.1
 
         if 1.6 <= moon_phase < 2.0:
-            moon_s = "$\u25D1$"
+            moon_s = '$\u25D1$'
             lw = 0.8
 
         if 2.0 <= moon_phase < 2.4:
-            moon_s = "$\u25D1$"
+            moon_s = '$\u25D1$'
             lw = 1.3
 
         if 2.4 <= moon_phase < 2.8:
-            moon_s = "$\u25D1$"
+            moon_s = '$\u25D1$'
             lw = 1.6
 
         if 2.8 <= moon_phase <= np.pi:
-            moon_s = "$\u2B24$"
+            moon_s = '$\u2B24$'
             lw = 0.1
 
         # make a markerstyle class instance and modify its transform prop
         t = MarkerStyle(marker=moon_s)
         t._transform = t.get_transform().rotate_deg(0)
-        ax.scatter(moon_time_vector, moon_airmasses, marker=t, s=70, c="k", lw=lw,
-                   label=f"Moon illum. ~{moon_illum_mean:.1f} %", zorder=2)
-        ax.plot_date(moon_time_vector, moon_airmasses, "-k", lw=0.7, zorder=2, alpha=0.3)
+        ax.scatter(moon_time_vector, moon_airmasses, marker=t, s=70, c='k', lw=lw,
+                   label=f'Moon illum. ~{moon_illum_mean:.1f} %', zorder=2)
+        ax.plot_date(moon_time_vector, moon_airmasses, '-k', lw=0.7, zorder=2, alpha=0.3)
 
         # \u263D \u25D1 \u25EF \u2B24 \u274D
         handles, labels = ax.get_legend_handles_labels()
-        ax.legend([handles[-1]], [labels[-1]], loc="best", prop=prop, frameon=False,
+        ax.legend([handles[-1]], [labels[-1]], loc='best', prop=prop, frameon=False,
                   fontsize=16)
 
         # For the minor ticks, use no labels; default NullFormatter.
-        ax.tick_params(axis="x", which="major", length=7)
-        ax.tick_params(axis="x", which="minor", length=3)
-        ax.tick_params(axis="both", which="both", direction="in")
+        ax.tick_params(axis='x', which='major', length=7)
+        ax.tick_params(axis='x', which='minor', length=3)
+        ax.tick_params(axis='both', which='both', direction="in")
         ax.set_xticklabels(ax.get_xticklabels(), rotation=20, ha='center')
 
         ax.xaxis.set_minor_locator(plticker.AutoMinorLocator())
         # ax.xaxis.set_minor_locator(dates.MinuteLocator(interval=45))
 
-        ax.axvline(morning_twilight.plot_date, c="k", ls="--", lw=1.1, zorder=1)
-        ax.axvline(evening_twilight.plot_date, c="k", ls="--", lw=1.1, zorder=1)
-        ax.axvline(midnight.plot_date, c="firebrick", ls="--", lw=1.5, zorder=1)
-        ax.annotate("MT", (morning_twilight.plot_date, 2.87), fontsize=9, ha="center", va="top",
+        ax.axvline(morning_twilight.plot_date, c='k', ls='--', lw=1.1, zorder=1)
+        ax.axvline(evening_twilight.plot_date, c='k', ls='--', lw=1.1, zorder=1)
+        ax.axvline(midnight.plot_date, c='firebrick', ls='--', lw=1.5, zorder=1)
+        ax.annotate('MT', (morning_twilight.plot_date, 2.87), fontsize=9, ha='center', va='top',
                     bbox={'facecolor': 'wheat', 'alpha': 1.0, 'pad': 0.15, 'boxstyle': 'round'})
-        ax.annotate("ET", (evening_twilight.plot_date, 2.87), fontsize=9, ha="center", va="top",
+        ax.annotate('ET', (evening_twilight.plot_date, 2.87), fontsize=9, ha='center', va='top',
                     bbox={'facecolor': 'wheat', 'alpha': 1.0, 'pad': 0.15, 'boxstyle': 'round'})
-        ax.grid(alpha=0.6, which="both", color="w")
+        ax.grid(alpha=0.6, which='both', color='w')
 
         ax1 = ax.twiny()
 
@@ -397,39 +397,39 @@ def filter_transit_observations(observatory="", utc_offset=0, cov_threshold=80,
         ax1.xaxis.set_major_locator(plticker.FixedLocator(ticks))
         ax1.xaxis.set_minor_locator(plticker.AutoMinorLocator())
 
-        delta_time = pd.Timedelta(utc_offset, unit="h")
+        delta_time = pd.Timedelta(utc_offset, unit='h')
 
         local_times = [datetime.datetime.strptime(item.get_text(), "%H:%M") + delta_time
                        for item in ax.get_xticklabels()]
 
-        local_labels = [local.strftime("%H:%M") for local in local_times]
+        local_labels = [local.strftime('%H:%M') for local in local_times]
         ax1.set_xticklabels(local_labels)
 
         start_day = date + delta_time
-        end_day = start_day + pd.Timedelta(1, unit="d")
+        end_day = start_day + pd.Timedelta(1, unit='d')
 
-        ax1.set_xlabel(f"{start_day} [LT] ➡︎")
+        ax1.set_xlabel(f'{start_day} [LT] ➡︎')
         ax1.xaxis.set_label_coords(0.11, 1.13)
 
         trans = ax.get_xaxis_transform()  # x in data untis, y in axes fraction
-        ax.annotate(f"{end_day} [LT] ➡︎", (midnight.plot_date, 1.13), fontsize=14,
-                    ha="left", va="center", xycoords=trans, c="firebrick")
+        ax.annotate(f'{end_day} [LT] ➡︎', (midnight.plot_date, 1.13), fontsize=14,
+                    ha='left', va='center', xycoords=trans, c='firebrick')
 
-        ax1.tick_params(axis="x", which="major", length=7, rotation=20)
-        ax1.tick_params(axis="x", which="minor", length=3)
-        ax1.tick_params(axis="both", which="both", direction="in")
+        ax1.tick_params(axis='x', which='major', length=7, rotation=20)
+        ax1.tick_params(axis='x', which='minor', length=3)
+        ax1.tick_params(axis='both', which='both', direction='in')
 
         fig.tight_layout(rect=[0., -0.1, 1., 1.])  # , pad=0.4, w_pad=0.5, h_pad=1.0)
 
-        fig_label = f"{starting_date}"
+        fig_label = f'{starting_date}'
         if i != 0:
-            fig_label = f"{starting_date}+{i}day"
-        fig_name = os.path.join(output_directory, f"filtered_{date}.png")
+            fig_label = f'{starting_date}+{i}day'
+        fig_name = os.path.join(output_directory, f'filtered_{date}.png')
         fig.savefig(fig_name, facecolor="w", dpi=300)
         plt.close(fig)
 
-        lab = "transits"
+        lab = 'transits'
         if len(good_transits) == 1:
-            lab = "transit"
-        print(f"Found {len(good_transits)} {lab} on {start_date}\n")
+            lab = 'transit'
+        print(f'Found {len(good_transits)} {lab} on {start_date}\n')
         i += 1

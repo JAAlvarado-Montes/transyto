@@ -69,6 +69,6 @@ def compute_noises(gain, exptime, target_flux_sec, target_background_sec,
     readout_noise = (pixel_readout * aperture_radius)**2 * np.pi
     sigma_readout = -2.5 * np.log10((target_signal - np.sqrt(readout_noise)) / target_signal)
 
-    Outputs = namedtuple("Outputs", "sigma_photon sigma_sky sigma_readout")
+    Outputs = namedtuple('Outputs', 'sigma_photon sigma_sky sigma_readout')
 
     return Outputs(sigma_photon, sigma_sky, sigma_readout)

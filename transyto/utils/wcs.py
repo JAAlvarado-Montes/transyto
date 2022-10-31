@@ -37,7 +37,7 @@ def plate_solve_frame(filenames_path, timeout=100, solve_opts=None,
     list: All the pathnames of solved files.
 
     """
-    files_list = search_files_across_directories(filenames_path, "*.fit*")
+    files_list = search_files_across_directories(filenames_path, '*.fit*')
 
     for fname in files_list:
 
@@ -55,8 +55,8 @@ def plate_solve_frame(filenames_path, timeout=100, solve_opts=None,
         if skip_solved and wcs.is_celestial:
             print(verbose)
             if verbose:
-                print("Solved file exists, skipping",
-                      "(pass skip_solved=False to solve again):",
+                print('Solved file exists, skipping',
+                      '(pass skip_solved=False to solve again):',
                       fname)
 
             out_dict.update(header)
@@ -64,10 +64,10 @@ def plate_solve_frame(filenames_path, timeout=100, solve_opts=None,
             continue
 
         if verbose:
-            print("Entering solve_field...")
+            print('Entering solve_field...')
 
         # solve_field_script = os.path.join(os.getenv(''), 'scripts', 'solve_field.sh')
-        solve_field_script = "solve-field"
+        solve_field_script = 'solve-field'
 
         # solve_field_script = os.system(solve_field_script)
 
@@ -121,15 +121,15 @@ def plate_solve_frame(filenames_path, timeout=100, solve_opts=None,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         except OSError as e:
-            raise "Can't send command to solve_field.sh: {} \t {}".format(e, cmd)
+            raise 'Cannot send command to solve_field.sh: {} \t {}'.format(e, cmd)
         except ValueError as e:
-            raise "Bad parameters to solve_field: {} \t {}".format(e, cmd)
+            raise 'Bad parameters to solve_field: {} \t {}'.format(e, cmd)
         except Exception as e:
-            raise "Timeout on plate solving: {}".format(e)
+            raise 'Timeout on plate solving: {}'.format(e)
             continue
 
         if verbose:
-            print(f"Returning proc from solve_field. WCS built for {fname}\n")
+            print(f'Returning proc from solve_field. WCS built for {fname}\n')
 
         try:
             # Handle extra files created by astrometry.net

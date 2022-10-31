@@ -45,7 +45,7 @@ class Data:
         try:
             data = CCDData.read(fname)
         except ValueError as err:
-            if err.args[0] == "a unit for CCDData must be specified.":
+            if err.args[0] == 'a unit for CCDData must be specified.':
                 data = CCDData.read(fname, unit=data_type)
             else:
                 raise err
@@ -54,7 +54,7 @@ class Data:
     @staticmethod
     def create_master_image_stack(filenames_list, output_filename,
                                   min_number_files_in_directory=3, output_directory="./",
-                                  method="median", scale=None, **kwargs):
+                                  method='median', scale=None, **kwargs):
         """Create a master image stack.
 
         Search for files into list to create a master file.
@@ -104,7 +104,7 @@ class Data:
 
         # Combine the file list to get the master data using any method
         combine(filenames_list, output_filename, method=method, scale=scale,
-                combine_uncertainty_function=np.ma.std, unit="adu")
+                combine_uncertainty_function=np.ma.std, unit='adu')
 
         # Print path of the master created
         print(f'CREATED (using {method}): {output_filename}\n')
@@ -138,21 +138,21 @@ class Data:
         with tempfile.TemporaryDirectory() as tmp_directory:
 
             # Create and charge masterdark
-            darks_list = search_files_across_directories(darks_directory, "*.fit*")
-            masterdark = self.create_master_image_stack(darks_list, "masterdark.fits",
+            darks_list = search_files_across_directories(darks_directory, '*.fit*')
+            masterdark = self.create_master_image_stack(darks_list, 'masterdark.fits',
                                                         output_directory=tmp_directory)
             masterdark = self.safe_load_ccdproc(masterdark, 'adu')
 
             if flat_correction:
                 # Create and charge masterbias
-                bias_list = search_files_across_directories(bias_directory, "*.fit*")
-                masterbias = self.create_master_image_stack(bias_list, "masterbias.fits",
+                bias_list = search_files_across_directories(bias_directory, '*.fit*')
+                masterbias = self.create_master_image_stack(bias_list, 'masterbias.fits',
                                                             output_directory=tmp_directory)
                 masterbias = self.safe_load_ccdproc(masterbias, 'adu')
 
                 # Create and charge masterflat
-                flats_list = search_files_across_directories(flats_directory, "*.fit*")
-                masterflat = self.create_master_image_stack(flats_list, "masterflat.fits",
+                flats_list = search_files_across_directories(flats_directory, '*.fit*')
+                masterflat = self.create_master_image_stack(flats_list, 'masterflat.fits',
                                                             output_directory=tmp_directory)
                 masterflat = self.safe_load_ccdproc(masterflat, 'adu')
 
@@ -162,24 +162,24 @@ class Data:
                 # Dark subtract the masterflat
                 masterflat = subtract_dark(masterflat, masterdark,
                                            dark_exposure=(masterdark.
-                                                          header["EXPTIME"] * u.s),
+                                                          header['EXPTIME'] * u.s),
                                            data_exposure=(masterflat.
-                                                          header["EXPTIME"] * u.s),
+                                                          header['EXPTIME'] * u.s),
                                            scale=True)
 
             if plate_solve:
                 print("Plate solving all fits files\n")
                 plate_solve_frame(self.filenames_path)
 
-            print("All fits files were plate solved\n")
+            print('All fits files were plate solved\n')
 
-            print("Starting data reduction process\n")
+            print('Starting data reduction process\n')
 
             # List of science exposures to clean
-            files_list = search_files_across_directories(self.filenames_path, "*fit*")
+            files_list = search_files_across_directories(self.filenames_path, '*fit*')
 
             # Output directory for files after reduction
-            output_directory = self.filenames_path + "Calibrated_data"
+            output_directory = self.filenames_path + 'Calibrated_data'
             os.makedirs(output_directory, exist_ok=True)
 
             # Reduce each science frame in files_list
@@ -190,9 +190,9 @@ class Data:
 
                     reduced_file = subtract_dark(raw_file, masterdark,
                                                  dark_exposure=(masterdark.
-                                                                header["EXPTIME"] * u.s),
+                                                                header['EXPTIME'] * u.s),
                                                  data_exposure=(raw_file.
-                                                                header["EXPTIME"] * u.s), scale=False)
+                                                                header['EXPTIME'] * u.s), scale=False)
 
                     # Flat-field correction
                     if flat_correction:
@@ -200,9 +200,9 @@ class Data:
 
                     # Save reduced science image to .fits file
                     file_name = os.path.basename(fn)
-                    if fn.endswith(".fz"):
-                        file_name = os.path.basename(fn).replace(".fz", "")
-                    science_image_cleaned_name = os.path.join(output_directory, "calibrated_" + file_name)
+                    if fn.endswith('.fz'):
+                        file_name = os.path.basename(fn).replace('.fz', '')
+                    science_image_cleaned_name = os.path.join(output_directory, 'calibrated_' + file_name)
 
                     # Get header and WCS of raw files checking any extension
                     header = get_header(fn)
@@ -214,7 +214,7 @@ class Data:
                     science_image_cleaned.write(science_image_cleaned_name, overwrite=True)
 
                     if os.path.isfile(science_image_cleaned_name) and verbose:
-                        print("-> Reduced: {}".format(science_image_cleaned_name))
+                        print('-> Reduced: {}'.format(science_image_cleaned_name))
                         fpack(science_image_cleaned_name)
                 except ValueError:
                     continue

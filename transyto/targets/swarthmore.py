@@ -47,7 +47,7 @@ def find_input(url, verbose=False):
         i += 1
 
 
-def find_observatory(observatory="", url="https://astro.swarthmore.edu/transits/transits.cgi"):
+def find_observatory(observatory='', url='https://astro.swarthmore.edu/transits/transits.cgi'):
     """Look for available observatories
 
     Parameters
@@ -71,8 +71,8 @@ def find_observatory(observatory="", url="https://astro.swarthmore.edu/transits/
     observatories = []
 
     for result in search:
-        obs = result["value"].split(";")[-1]
-        obs = obs.split(",")[0]
+        obs = result['value'].split(';')[-1]
+        obs = obs.split(',')[0]
 
         if len(observatories) <= 71:
             observatories.append(obs)
@@ -81,21 +81,21 @@ def find_observatory(observatory="", url="https://astro.swarthmore.edu/transits/
         for j, obs in enumerate(observatories):
             print(f"{j} {obs}\n")
 
-        observatory = input("Observatory not provided. Select one from the previous list: ")
+        observatory = input('Observatory not provided. Select one from the previous list: ')
 
     for i, obs in enumerate(observatories):
         if observatory in obs:
-            outputs = namedtuple("outputs", "idx name")
+            outputs = namedtuple('outputs', 'idx name')
             return outputs(i, obs)
         else:
             continue
 
 
-def configure_transit_finder(url="https://astro.swarthmore.edu/transits/transits.cgi",
-                             database="exoplanets", starting_date="today", days_to_print=1,
-                             days_in_past=0, min_start_elevation=30, elevation_conector="or",
+def configure_transit_finder(url='https://astro.swarthmore.edu/transits/transits.cgi',
+                             database='exoplanets', starting_date='today', days_to_print=1,
+                             days_in_past=0, min_start_elevation=30, elevation_conector='or',
                              min_end_elevation=30, min_transit_depth=5, max_magnitude=11,
-                             observatory=""):
+                             observatory=''):
     """Configure swarthmore webpage to look for transits.
 
     Parameters
@@ -134,50 +134,50 @@ def configure_transit_finder(url="https://astro.swarthmore.edu/transits/transits
 
     load_html = page.soup
 
-    form = load_html.select("form")[0]
+    form = load_html.select('form')[0]
 
     # Select observatory
     observatory = find_observatory(observatory=observatory)
-    form.select("option")[observatory.idx]["selected"] = "selected"
+    form.select('option')[observatory.idx]['selected'] = 'selected'
 
     # Target List
     db_flag = 0
-    if database == "tois":
+    if database == 'tois':
         db_flag = 2
-    form.select("input")[0]["value"] = db_flag
+    form.select('input')[0]['value'] = db_flag
 
     # Use UTC [1]
-    form.select("input")[12]["value"] = 1
+    form.select('input')[12]['value'] = 1
 
     # Start date
-    form.select("input")[15]["value"] = starting_date  # It can be ex. "mm-dd-yyyy"
+    form.select('input')[15]['value'] = starting_date  # It can be ex. "mm-dd-yyyy"
 
     # Days to print
-    form.select("input")[16]["value"] = days_to_print
+    form.select('input')[16]['value'] = days_to_print
 
     # Days in past
-    form.select("input")[17]["value"] = days_in_past
+    form.select('input')[17]['value'] = days_in_past
 
     # Minimum start elevation
-    form.select("input")[18]["value"] = min_start_elevation
+    form.select('input')[18]['value'] = min_start_elevation
 
     # And/or
-    form.select("input")[19]["value"] = elevation_conector
+    form.select('input')[19]['value'] = elevation_conector
 
     # Minimum end elevation
-    form.select("input")[21]["value"] = min_end_elevation
+    form.select('input')[21]['value'] = min_end_elevation
 
     # Minimum Depth
-    form.select("input")[28]["value"] = min_transit_depth
+    form.select('input')[28]['value'] = min_transit_depth
 
     # Maximum Magnitude
-    form.select("input")[29]["value"] = max_magnitude
+    form.select('input')[29]['value'] = max_magnitude
 
     # CSV table
-    form.select("input")[32]["value"] = 2
+    form.select('input')[32]['value'] = 2
 
     # Click Submit
-    form.select("input")[36]["value"] = "Submit"
+    form.select('input')[36]['value'] = 'Submit'
 
     charge_page = browser.submit(form, page.url)
 

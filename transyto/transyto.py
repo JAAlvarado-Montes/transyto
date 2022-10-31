@@ -308,10 +308,6 @@ class TimeSeriesAnalysis:
         self.target_star_coord_ra = self.target_star_coord[0]
         self.target_star_coord_dec = self.target_star_coord[1]
 
-        # Refine the name of the target star using the main ID from Simbad
-        simbad_result_table = Simbad.query_object(self.target_star_id)
-        self.target_star_id = simbad_result_table['MAIN_ID'][0]
-
         print(f"\n{9 * ' '}\tThe target star was found, {self.pipeline} will proceed"
               ' with the photometry:\n')
 
@@ -421,9 +417,16 @@ class TimeSeriesAnalysis:
 
             time.sleep(2)
 
+            output_directory = Path(f'{self._data_directory}/Photometry_field_stars/')
+            os.makedirs(output_directory, exist_ok=True)
+
             # Add subplot for fitted psf star
             fig = plt.figure()
             ax = fig.add_subplot(111)
+
+            # Plot the target and available reference stars in the field just as a reference.
+            phot_available_ref_stars_name = Path(output_directory,
+                                                 'photometry_available_ref_stars.png')
 
             ref_apertures = CircularAperture(ref_stars_positions, r=4.)
             target_aperture = CircularAperture(target_star_position, r=4.)
@@ -433,18 +436,23 @@ class TimeSeriesAnalysis:
             target_patches = target_aperture.plot(color='red', lw=1.5, alpha=0.5,
                                                   label=f'Target: {self.target_star_id}')
             ref_patches = ref_apertures.plot(color='blue', lw=1.5, alpha=0.5,
-                                             label='Reference stars')
+                                             label='Available reference stars')
 
             handles = (target_patches[0], ref_patches[0])
 
-            plt.legend(ncol=2, loc='upper center', fontsize=8.4,
-                       bbox_to_anchor=(0.5, 1.1), fancybox=True, frameon=True, handles=handles)
+            plt.legend(ncol=2, loc='upper center', fontsize=8.4, bbox_to_anchor=(0.5, 1.1),
+                       fancybox=True, frameon=True, handles=handles, prop={'weight': 'bold'})
+
+            plt.grid(alpha=0.4)
+            ax.set_xlabel('X pixels', fontsize=9)
+            ax.set_ylabel('Y pixels', fontsize=9)
 
             # Get the (x, y) coordinates of each reference star to visually check them.
-            for i, xy_pos in enumerate(ref_stars_positions):
-                ax.annotate(f"{i + 1}", xy_pos)
+            for i, xy_pos in zip(self.ref_stars_coordinates_list.index.values, ref_stars_positions):
+                ax.annotate(f"{i}", xy_pos)
 
-            plt.show()
+            plt.show(block=False)
+            fig.savefig(phot_available_ref_stars_name, dpi=300)
 
             # Ask what reference stars are going to be used (no variable, high proper motion, etc.)
             index_list = [int(index) for index in
@@ -464,8 +472,9 @@ class TimeSeriesAnalysis:
             fig = plt.figure()
             ax = fig.add_subplot(111)
 
-            # Plot the target and reference stars in the field just as a reference.
-            phot_stars_name = Path(self._output_directory, 'photometry_stars.png')
+            # Plot the target and selected reference stars in the field just as a reference.
+            phot_selected_ref_stars_name = Path(output_directory,
+                                                'photometry_selected_ref_stars.png')
 
             ref_apertures = CircularAperture(new_ref_stars_positions, r=4.)
             target_aperture = CircularAperture(target_star_position, r=4.)
@@ -475,16 +484,20 @@ class TimeSeriesAnalysis:
             target_patches = target_aperture.plot(color='red', lw=1.5, alpha=0.5,
                                                   label=f'Target: {self.target_star_id}')
             ref_patches = ref_apertures.plot(color='blue', lw=1.5, alpha=0.5,
-                                             label='Reference stars')
+                                             label='Selected reference stars')
 
             handles = (target_patches[0], ref_patches[0])
+
+            for i, xy_pos in zip(self.ref_stars_coordinates_list.index.values,
+                                 new_ref_stars_positions):
+                ax.annotate(f"{i}", xy_pos)
 
             plt.legend(ncol=2, loc='upper center', fontsize=8.4, bbox_to_anchor=(0.5, 1.1),
                        fancybox=True, frameon=True, handles=handles, prop={'weight': 'bold'})
             plt.grid(alpha=0.4)
             ax.set_xlabel('X pixels', fontsize=9)
             ax.set_ylabel('Y pixels', fontsize=9)
-            fig.savefig(phot_stars_name, dpi=300)
+            fig.savefig(phot_selected_ref_stars_name, dpi=300)
         else:
             print(f"{16 * ' '}• Not possible to find reference stars, first frame has no WCS\n")
 
@@ -671,7 +684,7 @@ class TimeSeriesAnalysis:
         fig, (ax, ax1, ax2) = plt.subplots(1, 3, figsize=(9, 5.5))
         fig.suptitle(f'Huntsman Camera {self.instrument} (frame {num_frame})\n'
                      f'Star {star_id}, RA: {star_ra}, DEC: {star_dec}', fontsize=15, y=0.995)
-        ax.set_title('Photometry Data\n\n'
+        ax.set_title('Photometric Data\n\n'
                      r'$r_\mathrm{inner\_aperture}$=1 x FWHM$_\mathrm{mean}$' '\n'
                      r'$r_\mathrm{inner\_annulus}$='
                      f"{self.r_in / self.r:.0f} x " r'$r_\mathrm{inner\_aperture}$' '\n'
@@ -1489,6 +1502,10 @@ class LightCurve(TimeSeriesAnalysis):
         print(pyfiglet.figlet_format(f'2. Light Curve')
               + '\t     Part of transyto package by Jaime A. Alvarado-Montes\n')
 
+        # Refine the name of the target star using the main ID from Simbad
+        simbad_result_table = Simbad.query_object(self.target_star_id)
+        self.target_star_id = simbad_result_table['MAIN_ID'][0]
+
         # Get the data from the target star.
         star_data = catalog.StarData(self.target_star_id).query_from_mast()
 
@@ -1661,9 +1678,9 @@ class LightCurve(TimeSeriesAnalysis):
                                f'{len(self.ref_stars_coordinates_list)}refstar.png')
 
         fig, ax = plt.subplots(2, 1,
-                               sharey='row', sharex="col", figsize=(8.5, 6.3))
-        fig.suptitle(f'Differential Photometry\nTarget Star {self.target_star_id}, '
-                     f'Vmag={star_vmag}', fontsize=13)
+                               sharey='row', sharex='col', figsize=(8.5, 6.3))
+        fig.suptitle(f'Differential Photometry\nTarget Star {self.target_star_id} '
+                     f'(Vmag={star_vmag})', fontsize=13)
 
         ax[1].plot(time, flux, 'k.', ms=3,
                    label=f'NBin = {self.exptime:.1f} s, std = {std:.2%}')
@@ -1750,7 +1767,7 @@ class LightCurve(TimeSeriesAnalysis):
                                    f'{len(self.ref_stars_coordinates_list)}refstar.png')
 
             fig, ax = plt.subplots(1, 1, sharey="row", sharex="col", figsize=(8.5, 6.3))
-            ax.set_title(f'Noise Sources in {self.target_star_id} ' r'($m_\mathrm{V}=10.0$)',
+            ax.set_title(f'Noise Sources in {self.target_star_id} ' f'(Vmag={star_vmag})',
                          fontsize=13)
             ax.plot_date(self.jdutc_times.plot_date, self.sigma_total[~nan_mask] * 100, 'k-',
                          label=r"$\sigma_{\mathrm{total}}$")
@@ -2001,7 +2018,7 @@ class LightCurve(TimeSeriesAnalysis):
         ax.xaxis.set_major_formatter(plticker.FormatStrFormatter('%.2f'))
         ax.yaxis.set_major_formatter(plticker.FormatStrFormatter('%.2f'))
 
-        plt.xlabel(f"{x_label}", fontsize=13)
+        plt.xlabel(f'{x_label}', fontsize=13)
         plt.xticks(rotation=30, size=8.0)
 
         fig.subplots_adjust(hspace=0.2)
