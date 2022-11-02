@@ -273,10 +273,8 @@ def filter_transit_observations(observatory='', utc_offset=0, cov_threshold=80,
                         airmass_start = observatory.altaz(obs_time, target).secz
                         airmass_end = observatory.altaz(end_time, target).secz
 
-                        ax.plot_date(obs_time.plot_date, airmass_start, ls='', marker='o',
-                                     ms=5.5, c=color, zorder=3)
-                        ax.plot_date(end_time.plot_date, airmass_end, ls='', marker='o',
-                                     ms=5.5, c=color, zorder=3)
+                        ax.plot_date(obs_time.plot_date, airmass_start, ms=5.5, c=color, zorder=3)
+                        ax.plot_date(end_time.plot_date, airmass_end, ms=5.5, c=color, zorder=3)
                     else:
                         continue
             else:
@@ -377,6 +375,8 @@ def filter_transit_observations(observatory='', utc_offset=0, cov_threshold=80,
         ax.tick_params(axis='x', which='major', length=7)
         ax.tick_params(axis='x', which='minor', length=3)
         ax.tick_params(axis='both', which='both', direction="in")
+
+        ax.set_xticks(ax.get_xticks().tolist())
         ax.set_xticklabels(ax.get_xticklabels(), rotation=20, ha='center')
 
         ax.xaxis.set_minor_locator(plticker.AutoMinorLocator())
