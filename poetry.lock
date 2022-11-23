@@ -1458,7 +1458,7 @@ pld = ["pybind11", "celerite"]
 [metadata]
 lock-version = "1.1"
 python-versions = '^3.10'
-content-hash = "7b9bfc8310ceb9fcc9b1135e63e50157b8df727a120a39d78fdf496f0e85b964"
+content-hash = "ab04f8d8e5ed6ddf9d5a04b1efc0f4f2f3dd46871c29499212e5f9b67a015843"
 
 [metadata.files]
 appnope = [
