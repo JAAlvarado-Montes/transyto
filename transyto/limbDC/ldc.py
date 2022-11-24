@@ -9,7 +9,6 @@ if sys.version_info.major == 2:
 else:
     from urllib.request import urlopen
 import scipy.interpolate as si
-from copy import copy
 
 try:
     import pyfits as fits
@@ -33,9 +32,9 @@ def FixSpaces(intervals):
             break
     for i in range(len(intervals)):
         if i != len(intervals) - 1:
-            s = s + str(np.double(intervals[i])) + '\t'
+            s = f'{s}{np.double(intervals[i])}\t'
         else:
-            s = s + str(np.double(intervals[i])) + '\n'
+            s = f'{s}{np.double(intervals[i])}\n'
     return s
 
 
@@ -314,8 +313,22 @@ def downloader(url):
     This function downloads a file from the given url using wget.
     """
     file_name = url.split('/')[-1]
-    print('\t             > Downloading file {:s} from {:s}.'.format(file_name, url))
+    print(f'\t             > Downloading file {file_name} from {url}.')
     os.system('wget -q ' + url)
+
+
+def get_closest(value, allowed_values):
+    """
+    Returns the closest variable from a list of numerics
+    """
+    if value in allowed_values:
+        return value
+
+        # Get closest value to input
+    diffs = np.abs(value - allowed_values)
+    closest = allowed_values[diffs.argmin()]
+
+    return closest
 
 
 def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
@@ -326,11 +339,11 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
     If the model is not present in the system, it downloads it from
     Robert L. Kurucz's website (kurucz.harvard.edu/grids.html).
     """
-    if not os.path.exists(rootdir + '/atlas_models'):
-        os.makedirs(rootdir + '/atlas_models', exist_ok=True)
-        os.makedirs(rootdir + '/atlas_models/raw_models', exist_ok=True)
+    model_path = os.path.join(rootdir, 'atlas_models')
 
-    model_path = rootdir + '/atlas_models/'
+    if not os.path.exists(model_path):
+        os.makedirs(model_path, exist_ok=True)
+        os.makedirs(os.path.join(model_path, 'raw_models'), exist_ok=True)
 
     # This is the list of all the available metallicities in Kurucz's website:
     possible_mets = np.array([-0.1, -0.2, -0.3, -0.5, -1.0, -1.5, -2.0, -2.5,
@@ -342,36 +355,14 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
     if s_vturb == -1:
         print('\t           > No known turbulent velocity. Setting it to 2 km/s.')
         s_vturb = 2.0
-    if s_vturb not in possible_vturb:
-        # Check closest vturb to input:
-        vturb_diff = np.inf
-        chosen_vturb = np.inf
-        for vturb in possible_vturb:
-            # Estimate distance between current and input vturb:
-            c_vturb_diff = np.abs(vturb - s_vturb)
-            if c_vturb_diff < vturb_diff:
-                chosen_vturb = c_vturb_diff
-                vturb_diff = copy(c_vturb_diff)
-        print('\t > For input vturb {} km/s, closest vturb is {} km/s.'.
-              format(s_vturb, chosen_vturb))
-    else:
-        chosen_vturb = s_vturb
 
-    if s_met not in possible_mets:
-        # Now check closest metallicity model for input star:
-        m_diff = np.inf
-        chosen_met = np.inf
-        for met in possible_mets:
-            # Estimate distance between current and input metallicity:
-            c_m_diff = np.abs(met - s_met)
-            if c_m_diff < m_diff:
-                chosen_met = met
-                m_diff = copy(c_m_diff)
+    chosen_vturb = get_closest(s_vturb, possible_vturb)
+    if chosen_vturb != s_vturb:
+        print(f'\t > For input vturb {s_vturb} km/s, closest vturb is {chosen_vturb} km/s.')
 
-        print('\t > For input metallicity {}, closest metallicity is {}.'
-              .format(s_met, chosen_met))
-    else:
-        chosen_met = s_met
+    chosen_met = get_closest(s_met, possible_mets)
+    if chosen_met != s_met:
+        print(f'\t > For input metallicity {s_met}, closest metallicity is {chosen_met}.')
 
     # Check if the intensity file for the calculated metallicity and
     # vturb is on the atlas_models folder:
@@ -379,28 +370,28 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
         met_dir = 'p00'
     elif chosen_met < 0:
         met_string = str(np.abs(chosen_met)).split('.')
-        met_dir = 'm' + met_string[0] + met_string[1]
+        met_dir = f'm{met_string[0]}{met_string[1]}'
     else:
         met_string = str(np.abs(chosen_met)).split('.')
-        met_dir = 'p' + met_string[0] + met_string[1]
+        met_dir = f'p{met_string[0]}{met_string[1]}'
 
     print('\t           > Checking if ATLAS model file is on the system ...')
     # This will make the code below easier to follow:
-    amodel = '{:s}k{:.0f}'.format(met_dir, chosen_vturb)
-    afile = model_path + 'raw_models/i' + amodel
+    amodel = f'{met_dir}k{chosen_vturb:.0f}'
+    afile = os.path.join(model_path, 'raw_models', f'i{amodel}')
 
-    if os.path.exists(afile + 'new.pck') or os.path.exists(afile + '.pck19') or os.path.exists(afile + '.pck'):
+    if os.path.exists(f'{afile}new.pck') or os.path.exists(f'{afile}.pck19') or os.path.exists(f'{afile}.pck'):
         print('\t           > Model file found.')
     else:
         # If not in the system, download it from Kurucz's website.
         # First, check all possible files to download:
         print('\t           > Model file not found.')
-        response = urlopen('http://kurucz.harvard.edu/grids/grid' + met_dir + '/')
+        response = urlopen(f'http://kurucz.harvard.edu/grids/grid{met_dir}/')
         html = str(response.read())
         ok = True
         filenames = []
         while ok:
-            idx = html.find('>i' + met_dir.lower())
+            idx = html.find(f'>i{met_dir.lower()}')
             if idx == -1:
                 ok = False
             else:
@@ -411,48 +402,45 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
 
         hasnew = False
         gotit = False
-        araw = model_path + "raw_models/"
+        araw = os.path.join(model_path, 'raw_models')
         # Check that filenames have the desired vturb and prefer *new* models:
         for afname in filenames:
             if 'new' in afname and amodel in afname:
                 hasnew = True
                 gotit = True
-                downloader('http://kurucz.harvard.edu/grids/grid'
-                           + met_dir + '/' + afname)
+                downloader(f'http://kurucz.harvard.edu/grids/grid{met_dir}/{afname}')
                 if not os.path.exists(araw):
                     os.makedirs(araw, exist_ok=True)
-                os.rename(afname, araw + afname)
+                os.rename(afname, os.path.join(araw, afname))
 
         if not hasnew:
             for afname in filenames:
                 if '.pck19' in afname and amodel in afname:
                     gotit = True
-                    downloader('http://kurucz.harvard.edu/grids/grid'
-                               + met_dir + '/' + afname)
+                    downloader(f'http://kurucz.harvard.edu/grids/grid{met_dir}/{afname}')
                     if not os.path.exists(araw):
                         os.makedirs(araw, exist_ok=True)
-                    os.rename(afname, araw + afname)
+                    os.rename(afname, os.path.join(araw, afname))
             if not gotit:
                 for afname in filenames:
-                    if amodel + '.pck' in afname:
+                    if f'{amodel}.pck' in afname:
                         gotit = True
-                        downloader('http://kurucz.harvard.edu/grids/grid'
-                                   + met_dir + '/' + afname)
+                        downloader(f'http://kurucz.harvard.edu/grids/grid{met_dir}/{afname}')
                         if not os.path.exists(araw):
                             os.makedirs(araw, exist_ok=True)
-                        os.rename(afname, araw + afname)
+                        os.rename(afname, os.path.join(araw, afname))
         if not gotit:
-            print('\t > No model with closest metallicity of {} and closest '
-                  'vturb of {} km/s found.\n\t   Please, modify the input '
+            print(f'\t > No model with closest metallicity of {chosen_met} and closest '
+                  f'vturb of {chosen_vturb} km/s found.\n\t   Please modify the input '
                   'values of the target and select other stellar parameters '
-                  'for it.'.format(chosen_met, chosen_vturb))
+                  'for it.')
             sys.exit()
 
     # Check if the models in machine readable form have been generated.
     # If not, generate them:
     if not os.path.exists(model_path + amodel):
         # Now read the files and generate machine-readable files:
-        possible_paths = [afile + 'new.pck', afile + '.pck19', afile + '.pck']
+        possible_paths = [f'{afile}new.pck', f'{afile}.pck19', f'{afile}.pck']
 
         for i in range(len(possible_paths)):
             possible_path = possible_paths[i]
@@ -460,27 +448,29 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
                 lines = getFileLines(possible_path)
                 # Create folder for current metallicity and turbulent
                 # velocity if not created already:
-                if not os.path.exists(model_path + amodel):
-                    os.makedirs(model_path + amodel, exist_ok=True)
+                amodel_path = os.path.join(model_path, amodel)
+                if not os.path.exists(amodel_path):
+                    os.makedirs(amodel_path, exist_ok=True)
                 # Save files in the folder:
                 while True:
                     TEFF, GRAVITY, LH = getATLASStellarParams(lines)
-                    if not os.path.exists(model_path + amodel + '/' + TEFF):
-                        os.makedirs(model_path + amodel + '/' + TEFF, exist_ok=True)
+                    teff_path = os.path.join(amodel_path, TEFF)
+                    if not os.path.exists(teff_path):
+                        os.makedirs(teff_path, exist_ok=True)
                     idx, mus = getIntensitySteps(lines)
-                    save_mr_file = True
-                    if os.path.exists(model_path + amodel + '/' + TEFF
-                                      + '/grav_' + GRAVITY + '_lh_' + LH + '.dat'):
-                        save_mr_file = False
+
+                    mr_file = os.path.join(teff_path, f'grav_{GRAVITY}_lh_{LH}.dat')
+                    save_mr_file = not os.path.exists(mr_file)
+
                     if save_mr_file:
-                        f = open(model_path + amodel + '/' + TEFF
-                                 + '/grav_' + GRAVITY + '_lh_' + LH + '.dat', 'w')
-                        f.write('#TEFF:' + TEFF
-                                + ' METALLICITY:' + met_dir
-                                + ' GRAVITY:' + GRAVITY
-                                + ' VTURB:' + str(int(chosen_vturb))
-                                + ' L/H: ' + LH + '\n')
-                        f.write('#wav (nm) \t cos(theta):' + mus)
+                        f = open(mr_file, 'w')
+                        f.write(f'#TEFF:{TEFF}'
+                                f' METALLICITY:{met_dir}'
+                                f' GRAVITY:{GRAVITY}'
+                                f' VTURB:{int(chosen_vturb)}'
+                                f' L/H: {LH}\n')
+                        f.write(f'#wav (nm) \t cos(theta):{mus}')
+
                     for i in range(idx, len(lines)):
                         line = lines[i]
                         idx = line.find('EFF')
@@ -494,14 +484,16 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
                             wav_p_intensities = line.split(' ')
                             s = FixSpaces(wav_p_intensities)
                             if save_mr_file:
-                                f.write(s + '\n')
+                                f.write(f'{s}\n')
+
                     if save_mr_file:
                         f.close()
+
                     if i == len(lines) - 1:
                         break
 
     # Now, assuming models are written in machine readable form, we can work:
-    chosen_met_folder = model_path + amodel
+    chosen_met_folder = os.path.join(model_path, amodel)
 
     # Now check closest Teff for input star:
     t_diff = np.inf
@@ -522,7 +514,8 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
     # Now check closest gravity and turbulent velocity:
     grav_diff = np.inf
     chosen_grav = 0.0
-    all_files = glob.glob(chosen_teff_folder + '/*')
+    chosen_filename = ''
+    all_files = glob.glob(os.path.join(chosen_teff_folder, '*'))
 
     for filename in all_files:
         grav = np.double((filename.split('grav')[1]).split('_')[1])
@@ -534,13 +527,11 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
 
     # Summary:
     model_root_len = len(model_path)
-    print('\t           > For input metallicity {}, effective temperature {} K, and\n'
-          '\t             log-gravity {}, and turbulent velocity {} km/s, closest\n'
-          '\t             combination is metallicity: {}, effective temperature: {} K,\n'
-          '\t             log-gravity {} and turbulent velocity of {} km/s.\n\n'
-          '\t           > Chosen model file to be used: {:s}.\n'.
-          format(s_met, s_teff, s_grav, s_vturb, chosen_met, chosen_teff,
-                 chosen_grav, chosen_vturb, chosen_filename[model_root_len:]))
+    print(f'\t           > For input metallicity {s_met}, effective temperature {s_teff} K, and\n'
+          f'\t             log-gravity {s_grav}, and turbulent velocity {s_vturb} km/s, closest\n'
+          f'\t             combination is metallicity: {chosen_met}, effective temperature: {chosen_teff} K,\n'
+          f'\t             log-gravity {chosen_grav} and turbulent velocity of {chosen_vturb} km/s.\n\n'
+          f'\t           > Chosen model file to be used: {chosen_filename[model_root_len:]}.\n')
 
     return chosen_filename, chosen_teff, chosen_grav, chosen_met, chosen_vturb
 
@@ -548,18 +539,20 @@ def ATLAS_model_search(s_met, s_grav, s_teff, s_vturb):
 def PHOENIX_model_search(s_met, s_grav, s_teff, s_vturb):
     """
     Given input metallicities, gravities, effective temperature and
-    microtiurbulent velocity, this function estimates which model is
+    microturbulent velocity, this function estimates which model is
     the most appropiate (i.e., the closer one in parameter space).
     If the model is not present in the system, it downloads it from
     the PHOENIX public library (phoenix.astro.physik.uni-goettingen.de).
     """
-
-    if not os.path.exists(rootdir + '/phoenix_models'):
-        os.makedirs(rootdir + '/phoenix_models', exist_ok=True)
-        os.makedirs(rootdir + '/phoenix_models/raw_models', exist_ok=True)
-
     # Path to the PHOENIX models
-    model_path = rootdir + '/phoenix_models/raw_models/'
+    phoenix_path = os.path.join(rootdir, 'phoenix_models')
+    model_path = os.path.join(phoenix_path, 'raw_models')
+
+    if not os.path.exists(phoenix_path):
+        os.makedirs(phoenix_path, exist_ok=True)
+
+    if not os.path.exists(model_path):
+        os.makedirs(model_path, exist_ok=True)
 
     # In PHOENIX models, all of them are computed with vturb = 2 km/2
     if s_vturb == -1:
@@ -567,22 +560,9 @@ def PHOENIX_model_search(s_met, s_grav, s_teff, s_vturb):
         s_vturb = 2.0
 
     possible_mets = np.array([0.0, -0.5, -1.0, 1.0, -1.5, -2.0, -3.0, -4.0])
-
-    if s_met not in possible_mets:
-        # Now check closest metallicity model for input star:
-        m_diff = np.inf
-        chosen_met = np.inf
-        for met in possible_mets:
-            # Estimate distance between current and input metallicity:
-            c_m_diff = np.abs(met - s_met)
-            if c_m_diff < m_diff:
-                chosen_met = met
-                m_diff = copy(c_m_diff)
-
-        print('\t    + For input metallicity {}, closest value is {}.'.
-              format(s_met, chosen_met))
-    else:
-        chosen_met = s_met
+    chosen_met = get_closest(s_met, possible_mets)
+    if chosen_met != s_met:
+        print(f'\t > For input metallicity {s_met}, closest metallicity is {chosen_met}.')
 
     # Generate the folder name:
     if chosen_met == 0.0:
@@ -591,13 +571,13 @@ def PHOENIX_model_search(s_met, s_grav, s_teff, s_vturb):
     else:
         abs_met = str(np.abs(chosen_met)).split('.')
         if chosen_met < 0:
-            met_folder = 'm' + abs_met[0] + abs_met[1]
-            model = 'Z-' + abs_met[0] + abs_met[1]
+            met_folder = f'm{abs_met[0]}{abs_met[1]}'
+            model = f'Z-{abs_met[0]}{abs_met[1]}'
         else:
-            met_folder = 'p' + abs_met[0] + abs_met[1]
-            model = 'Z+' + abs_met[0] + abs_met[1]
+            met_folder = f'p{abs_met[0]}{abs_met[1]}'
+            model = f'Z+{abs_met[0]}{abs_met[1]}'
 
-    chosen_met_folder = model_path + met_folder
+    chosen_met_folder = os.path.join(model_path, met_folder)
 
     # Check if folder exists. If it does not, create it and download the
     # PHOENIX models that are closer in temperature and gravity to the
@@ -609,13 +589,16 @@ def PHOENIX_model_search(s_met, s_grav, s_teff, s_vturb):
 
     # See if in a past call the file list for the given metallicity was
     # saved; if not, retrieve it from the PHOENIX website:
-    if os.path.exists('file_list.dat'):
-        with open('file_list.dat') as f:
+    m_file_list = 'file_list.dat'
+
+    if os.path.exists(m_file_list):
+        with open(m_file_list) as f:
             all_files = f.readlines()
             for i in np.arange(len(all_files)):
                 all_files[i] = all_files[i].strip()
     else:
-        response = urlopen('ftp://phoenix.astro.physik.uni-goettingen.de/SpecIntFITS/PHOENIX-ACES-AGSS-COND-SPECINT-2011/' + model + '/')
+        response = urlopen('ftp://phoenix.astro.physik.uni-goettingen.de/SpecIntFITS/'
+                           f'PHOENIX-ACES-AGSS-COND-SPECINT-2011/{model}/')
         html = str(response.read())
         all_files = []
         while True:
@@ -626,86 +609,75 @@ def PHOENIX_model_search(s_met, s_grav, s_teff, s_vturb):
                 idx2 = html.find('.fits')
                 all_files.append(html[idx:idx2 + 5])
             html = html[idx2 + 5:]
-        f = open('file_list.dat', 'w')
+        f = open(m_file_list, 'w')
         for file in all_files:
-            f.write(file + '\n')
+            f.write(f'{file}\n')
         f.close()
+
     # Now check closest Teff for input star:
-    t_diff = np.inf
-    chosen_teff = np.inf
-    for file in all_files:
-        teff = np.double(file[3:8])
-        c_t_diff = abs(teff - s_teff)
-        if c_t_diff < t_diff:
-            chosen_teff = teff
-            t_diff = c_t_diff
+    possible_teff = [np.double(f[3:8]) for f in all_files]
+    chosen_teff = get_closest(s_teff, possible_teff)
 
-    print('\t    + For input effective temperature {:.1f} K, closest '
-          'value is {:.0f} K.'.format(s_teff, chosen_teff))
+    if chosen_teff != s_teff:
+        print(f'\t    + For input effective temperature {s_teff:.1f} K, closest value is {chosen_teff:.0f} K.')
 
-    teff_files = []
-    teff_string = "{:05.0f}".format(chosen_teff)
-    for file in all_files:
-        if teff_string in file:
-            teff_files.append(file)
+    teff_string = f'{chosen_teff:05.0f}'
+    teff_files = [f for f in all_files if teff_string in f]
 
     # Now check closest gravity:
-    grav_diff = np.inf
-    chosen_grav = np.inf
-    chosen_fname = ''
-    for file in teff_files:
-        grav = np.double(file[9:13])
-        c_g_diff = abs(grav - s_grav)
-        if c_g_diff < grav_diff:
-            chosen_grav = grav
-            grav_diff = c_g_diff
-            chosen_fname = file
+    possible_grav = [np.double(f[9:13]) for f in teff_files]
+    chosen_grav = get_closest(s_grav, possible_grav)
+    chosen_fname = teff_files[possible_grav.index(chosen_grav)]
 
     print('\t    + Checking if PHOENIX model file is on the system...')
+
     # Check if file is already downloaded. If not, download it from the PHOENIX website:
     if not os.path.exists(chosen_fname):
         print('\t    + Model file not found.')
-        downloader('ftp://phoenix.astro.physik.uni-goettingen.de/SpecIntFITS/PHOENIX-ACES-AGSS-COND-SPECINT-2011/' + model + '/' + chosen_fname)
+        downloader('ftp://phoenix.astro.physik.uni-goettingen.de/SpecIntFITS/'
+                   f'PHOENIX-ACES-AGSS-COND-SPECINT-2011/{model}/{chosen_fname}')
     else:
         print('\t    + Model file found.')
 
     os.chdir(cwd)
-    chosen_path = chosen_met_folder + '/' + chosen_fname
+    chosen_path = os.path.join(chosen_met_folder, chosen_fname)
 
     # Summary:
-    print('\t + For input metallicity {}, effective temperature {} K, and\n'
-          '\t   log-gravity {}, closest combination is metallicity: {},\n'
-          '\t   effective temperature: {} K, and log-gravity {}\n\n'
-          '\t + Chosen model file to be used:\n\t\t{:s}\n'.format(s_met, s_teff,
-                                                                  s_grav, chosen_met,
-                                                                  chosen_teff, chosen_grav,
-                                                                  chosen_fname))
+    print(f'\t + For input metallicity {s_met}, effective temperature {s_teff} K, and\n'
+          f'\t   log-gravity {s_grav}, closest combination is metallicity: {chosen_met},\n'
+          f'\t   effective temperature: {chosen_teff} K, and log-gravity {chosen_grav}\n\n'
+          f'\t + Chosen model file to be used:\n\t\t{chosen_fname}\n')
 
     return chosen_path, chosen_teff, chosen_grav, chosen_met, s_vturb
 
 
 def get_response(min_w, max_w, response_function):
-    root = rootdir + "/response_functions/"
+    root = os.path.join(rootdir, 'response_functions')
+
     # Standard response functions:
-    if response_function.lower() == 'kphires':
-        response_file = root + "standard/kepler_response_hires1.txt"
-    elif response_function.lower() == 'kplowres':
-        response_file = root + "standard/kepler_response_lowres1.txt"
-    elif response_function.lower() == 'irac1':
-        response_file = root + "standard/IRAC1_subarray_response_function.txt"
-    elif response_function.lower() == 'irac2':
-        response_file = root + "standard/RAC2_subarray_response_function.txt"
-    elif response_function.lower() == 'wfc3':
-        response_file = root + "standard/WFC3_response_function.txt"
+    lower_function_name = response_function.lower()
+    if lower_function_name == 'kphires':
+        response_file = os.path.join(root, 'standard', 'kepler_response_hires1.txt')
+    elif lower_function_name == 'kplowres':
+        response_file = os.path.join(root, 'standard', 'kepler_response_lowres1.txt')
+    elif lower_function_name == 'irac1':
+        response_file = os.path.join(root, 'standard', 'IRAC1_subarray_response_function.txt')
+    elif lower_function_name == 'irac2':
+        response_file = os.path.join(root, 'standard', 'RAC2_subarray_response_function.txt')
+    elif lower_function_name == 'wfc3':
+        response_file = os.path.join(root, 'standard', 'WFC3_response_function.txt')
+
     # User-defined response functions:
     else:
-        if os.path.exists(root + response_function):
-            response_file = root + response_function
+        user_file = os.path.join(root, response_function)
+        if os.path.exists(user_file):
+            response_file = user_file
         elif os.path.exists(response_function):  # RF not in RF folder:
             response_file = response_function
         else:
-            print("Error: '{:s}' is not valid.".format(response_function))
+            print(f'Error: {response_function} is not valid.')
             sys.exit()
+
     # Open the response file, which we assume has as first column wavelength
     # and second column the response:
     w, r = np.loadtxt(response_file, unpack=True)
@@ -716,8 +688,8 @@ def get_response(min_w, max_w, response_function):
         if max_w is None:
             max_w = max(w)
         print('\t           > Kepler response file detected.  Switch from nanometers to Angstroms.')
-        print('\t           > Minimum wavelength: {} A.\n'
-              '\t           > Maximum wavelength: {} A.'.format(min(w), max(w)))
+        print(f'\t           > Minimum wavelength: {min(w)} A.\n'
+              f'\t           > Maximum wavelength: {max(w)} A.')
     elif 'IRAC' in response_file:
         w = 1e4 * w
         if min_w is None:
@@ -726,8 +698,8 @@ def get_response(min_w, max_w, response_function):
             max_w = max(w)
         print('\t > IRAC response file detected.  Switch from microns to '
               'Angstroms.')
-        print('\t > Minimum wavelength: {} A.\n'
-              '\t > Maximum wavelength: {} A.'.format(min(w), max(w)))
+        print(f'\t > Minimum wavelength: {min(w)} A.\n'
+              f'\t > Maximum wavelength: {max(w)} A.')
     else:
         if min_w is None:
             min_w = min(w)
@@ -764,7 +736,7 @@ def read_ATLAS(chosen_filename, model):
         lines = f.readlines()
     # Remove comments and blank lines:
     for i in np.flipud(np.arange(len(lines))):
-        if lines[i].strip() == "" or lines[i].strip().startswith("#"):
+        if lines[i].strip() == '' or lines[i].strip().startswith('#'):
             lines.pop(i)
 
     nwave = len(lines)
@@ -793,7 +765,7 @@ def read_ATLAS(chosen_filename, model):
 
     # Select only those with non-zero intensity:
     flag = intensities[:, 0] != 0.0
-    if model == "A100":
+    if model == 'A100':
         return wavelengths[flag], I100[flag], mu100
     else:
         return wavelengths[flag], intensities[flag], mu
@@ -977,7 +949,7 @@ def calc_lds(name, response_function, model, s_met, s_grav, s_teff,
             chosen_vturb) = ATLAS_model_search(s_met, s_grav, s_teff, s_vturb)
 
         # Read wavelengths and intensities (I) from ATLAS models.
-        # If model is "A100", it also returns the interpolated
+        # If model is 'A100', it also returns the interpolated
         # intensities (I100) and the associated mu values (mu100).
         # If not, those arrays are empty:
         wavelengths, I, mu = read_ATLAS(chosen_filename, model)
@@ -989,7 +961,7 @@ def calc_lds(name, response_function, model, s_met, s_grav, s_teff,
                                       interpolation_order, model)
 
         # Finally, obtain the limb-darkening coefficients:
-        if model == "AS":
+        if model == 'AS':
             idx = mu >= 0.05  # Select indices as in Sing (2010)
         else:
             idx = mu >= 0.0  # Select all
@@ -1059,7 +1031,7 @@ def calc_lds(name, response_function, model, s_met, s_grav, s_teff,
 
 
 def compute(Teff=None, grav=None, metal=None, vturb=-1, RF=None, FT=None, min_w=None,
-            max_w=None, name="", interpolation_order=1, atlas_correction=True,
+            max_w=None, name='', interpolation_order=1, atlas_correction=True,
             photon_correction=True):
     """
     Compute limb-darkening coefficients.
@@ -1123,9 +1095,9 @@ def compute(Teff=None, grav=None, metal=None, vturb=-1, RF=None, FT=None, min_w=
     ldc2 = lds.lds(5500.0, 4.5, 0.0, -1, "KpHiRes", "A100,P100")
     """
 
-    if (Teff is None or grav is None or metal is None or RF is None or FT is None):
-        print("Invalid input parameters.  Either define ifile, or "
-              "define Teff, grav, metal, RF, and FT.")
+    if Teff is None or grav is None or metal is None or RF is None or FT is None:
+        print('Invalid input parameters.  Either define ifile, or '
+              'define Teff, grav, metal, RF, and FT.')
         return None
     input_set = [[name, RF, FT, metal, grav, Teff, vturb, min_w, max_w]]
 
@@ -1138,9 +1110,9 @@ def compute(Teff=None, grav=None, metal=None, vturb=-1, RF=None, FT=None, min_w=
             iset[2] = model
             LDC.append(calc_lds(*iset))
 
-    print("         \t • LD calculation finished without problems.\n")
+    print('         \t • LD calculation finished without problems.\n')
 
     if os.path.exists(rootdir + '/atlas_models'):
-        subprocess.run(f"rm -rf {rootdir}/atlas_models", shell=True, check=True)
+        subprocess.run(f'rm -rf {rootdir}/atlas_models', shell=True, check=True)
 
     return LDC
