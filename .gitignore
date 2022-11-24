@@ -7,7 +7,7 @@ __pycache__/
 *.so
 
 # Mac hidden directories
-.DS_Store/
+.DS_Store
 
 # Distribution / packaging
 .Python
