@@ -114,8 +114,8 @@ def filter_transit_observations(observatory='', utc_offset=0, cov_threshold=80,
         with open(tois_file, 'wb') as file:
             file.write(r_toi.content)
 
-    exop_df = pd.read_csv(planets_file, delimiter=",")
-    toi_df = pd.read_csv(tois_file, delimiter=",")
+    exop_df = pd.read_csv(planets_file, delimiter=',')
+    toi_df = pd.read_csv(tois_file, delimiter=',')
 
     big_df = pd.concat([exop_df, toi_df], ignore_index=True, sort=False)
 
@@ -129,7 +129,7 @@ def filter_transit_observations(observatory='', utc_offset=0, cov_threshold=80,
     big_df = big_df[big_df['depth(ppt)'] >= min_transit_depth]
 
     # Group transits by date.
-    big_df['new_start_date'] = pd.to_datetime(big_df['start time']) - pd.Timedelta(0.2, unit="h")
+    big_df['new_start_date'] = pd.to_datetime(big_df['start time']) - pd.Timedelta(0.2, unit='h')
     big_df['new_start_date'] = big_df['new_start_date'].dt.date
 
     big_df['new_end_date'] = pd.to_datetime(big_df['end time']).dt.date
@@ -218,21 +218,21 @@ def filter_transit_observations(observatory='', utc_offset=0, cov_threshold=80,
                     ra, dec = coord.rsplit()
 
                     # Classify unique transits by RA.
-                    if len(ra) == 11 and "-" not in ra:
+                    if len(ra) == 11 and '-' not in ra:
                         comparison_1 = ra[:-4]
-                    if len(ra) == 12 and "-" in ra:
+                    if len(ra) == 12 and '-' in ra:
                         comparison_1 = ra[:-4]
-                    if len(ra) == 10 and "-" not in ra:
+                    if len(ra) == 10 and '-' not in ra:
                         comparison_1 = ra[:-3]
 
                     # Classify unique transits by DEC.
-                    if len(dec) == 11 and "-" not in dec:
+                    if len(dec) == 11 and '-' not in dec:
                         comparison_2 = dec[:-4]
-                    if len(dec) == 11 and "-" in dec:
+                    if len(dec) == 11 and '-' in dec:
                         comparison_2 = dec[:-3]
-                    if len(dec) == 12 and "-" in dec:
+                    if len(dec) == 12 and '-' in dec:
                         comparison_2 = dec[:-4]
-                    if len(dec) == 10 and "-" not in dec:
+                    if len(dec) == 10 and '-' not in dec:
                         comparison_2 = dec[:-3]
 
                     # Select transits with unique (RA, DEC) to avoid repeated entries.
@@ -323,7 +323,7 @@ def filter_transit_observations(observatory='', utc_offset=0, cov_threshold=80,
         moon_illuminations = np.array(moon_illum)
 
         font_path = os.path.dirname(__file__)
-        prop = FontProperties(fname=os.path.join(font_path, 'Symbola.ttf'))
+        prop = FontProperties(fname=os.path.join(font_path, '../assets/Symbola.ttf'))
 
         moon_illum_mean = np.nanmean(moon_illuminations) * 100
 
