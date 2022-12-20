@@ -32,7 +32,7 @@ from astropy.visualization import SqrtStretch
 from astropy.visualization.mpl_normalize import ImageNormalize
 from astropy.modeling import models, fitting
 
-from transitleastsquares import transitleastsquares
+#from transitleastsquares import transitleastsquares
 from collections import namedtuple
 from tqdm import tqdm
 from pathlib import Path
@@ -1678,7 +1678,7 @@ class LightCurve(TimeSeriesAnalysis):
                                f'{len(self.ref_stars_coordinates_list)}refstar.png')
 
         fig, ax = plt.subplots(2, 1,
-                               sharey='row', sharex='col', figsize=(8.5, 6.3))
+                               sharey='row', sharex='col', figsize=(8.5, 7.3))
         fig.suptitle(f'Differential Photometry\nTarget Star {self.target_star_id} '
                      f'(Vmag={star_vmag})', fontsize=13)
 
@@ -1690,7 +1690,6 @@ class LightCurve(TimeSeriesAnalysis):
                        label=r"$\sigma_{\mathrm{tot}}=\sqrt{\sigma_{\mathrm{phot}}^{2} "
                        r"+ \sigma_{\mathrm{sky}}^{2} + \sigma_{\mathrm{scint}}^{2} + "
                        r"\sigma_{\mathrm{read}}^{2}}$", capsize=0.0)
-
         # Binned data and times
         if bins != 0:
             binned_times, binned_flux = self.bin_timeseries(time, flux, bins)
@@ -1702,7 +1701,8 @@ class LightCurve(TimeSeriesAnalysis):
                        label=f'NBin = {nbin_tot:.1f} s, std = {std_binned:.2%}')
 
         ax[1].set_ylabel('Relative Flux', fontsize=13)
-        ax[1].legend(fontsize=8.0, loc=(0.0, 1.0), ncol=3, framealpha=1.0, frameon=False)
+        ax[1].legend(fontsize=8.0, loc=(0.0, 2.34), ncol=3, framealpha=1.0, frameon=False)
+        fig.tight_layout(pad=2.85)
 
         for counter, ref_star_flux_sec in zip(self.ref_stars_coordinates_list.index.values.tolist(),
                                               self.ref_stars_flux_sec):
@@ -1714,14 +1714,15 @@ class LightCurve(TimeSeriesAnalysis):
             ax[0].plot(time, ref_star_flux_sec[~nan_mask][clip_mask]
                        / np.nanmean(ref_star_flux_sec[~nan_mask][clip_mask]),
                        'o', ms=1.3, label=f'Ref. {counter}')
-            ax[0].set_ylabel('Relative Flux', fontsize=13)
+            ax[0].set_ylabel('Normalised Flux', fontsize=13)
             # ax[0].set_ylim((0.9, 1.05))
             ax[0].legend(fontsize=8.1, loc='lower left', ncol=len(self.ref_stars_coordinates_list),
                          framealpha=1.0, frameon=True)
 
         ax[1].text(0.97, 0.9, 'b)', fontsize=11, transform=ax[1].transAxes)
         ax[0].text(0.97, 0.9, 'a)', fontsize=11, transform=ax[0].transAxes)
-
+        ax[0].set_title('Normalised Flux of Reference Stars')
+        ax[1].set_title(f'Relative Flux of {self.target_star_id}')
         # Plot the ingress, mid-transit, and egress times.
         if self.transit_times:
             ax[1].axvline(ingress, c='k', ls='--', alpha=0.5)
