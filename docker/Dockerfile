@@ -31,7 +31,7 @@ SHELL ["conda", "run", "/bin/bash", "-c"]
 
 # Install local transyto into the image
 COPY . ${TRANSYTO}
-RUN cd ${TRANSYTO} && python setup.py develop
+RUN cd ${TRANSYTO} && poetry install --all-extras
 
 WORKDIR /home
 CMD ["/bin/bash"]

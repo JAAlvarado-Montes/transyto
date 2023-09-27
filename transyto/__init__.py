@@ -34,6 +34,8 @@ import logging
 log = logging.getLogger(__name__)
 log.addHandler(logging.StreamHandler())
 
-from .version import __version__
+import importlib.metadata
+__version__ = importlib.metadata.version(__package__)
+
 from .transyto import *
 from transyto.utils import *
