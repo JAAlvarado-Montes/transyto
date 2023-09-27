@@ -20,7 +20,7 @@ from __future__ import absolute_import
 
 import os
 PACKAGEDIR = os.path.abspath(os.path.dirname(__file__))
-MPLSTYLE = '{}/data/transyto.mplstyle'.format(PACKAGEDIR)
+MPLSTYLE = os.path.join(PACKAGEDIR, 'data', 'transyto.mplstyle')
 
 # By default Matplotlib is configured to work with a graphical user interface
 # which may require an X11 connection (i.e. a display).  When no display is

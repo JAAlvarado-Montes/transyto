@@ -40,9 +40,9 @@ def find_input(url, verbose=False):
     i = 0
     for result in search:
         if verbose:
-            print(f"{i} {result}", '\n')
+            print(f'{i} {result}\n')
             input_value = result.get('value')
-            print(input_value, '\n')
+            print(f'{input_value}\n')
         results.append(result)
         i += 1
 
@@ -79,7 +79,7 @@ def find_observatory(observatory='', url='https://astro.swarthmore.edu/transits/
 
     if not observatory:
         for j, obs in enumerate(observatories):
-            print(f"{j} {obs}\n")
+            print(f'{j} {obs}\n')
 
         observatory = input('Observatory not provided. Select one from the previous list: ')
 
@@ -102,8 +102,10 @@ def configure_transit_finder(url='https://astro.swarthmore.edu/transits/',
     ----------
     url : str, optional (default is Swarthmore webpage)
         Swarthmore webpage to look for transits.
-    starting_date : str, optional  (default is "today")
-        Starting date to look for transits. Either "today" or "mm-dd-yyyy" (ex. "08-20-2021")
+    database: str, optional (default is 'exoplanets')
+         The specific database to query
+    starting_date : str, optional  (default is 'today')
+        Starting date to look for transits. Either "today" or 'mm-dd-yyyy' (ex. '08-20-2021')
     days_to_print : int, optional (default is 5)
         Number of days from provided date to show transits.
     days_in_past : str, optional (default is 0)
@@ -111,7 +113,7 @@ def configure_transit_finder(url='https://astro.swarthmore.edu/transits/',
     min_start_elevation : int, optional (default is 30)
         Minimum elevation at start of transit to look for transits.
     elevation_conector : str, optional (default is "or")
-        Conditional for minimum and maximum elevation. It can be "or" and "and"
+        Conditional for minimum and maximum elevation. It can be 'or' and 'and'
     min_end_elevation : int, optional (default is 30)
         Minimum elevation at end of transit to look for transits.
     min_transit_depth : int, optional (default is 5)
