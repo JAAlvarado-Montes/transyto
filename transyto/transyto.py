@@ -251,8 +251,8 @@ class TimeSeriesAnalysis:
 
     def _slice_data(self, data, origin, width):
         y, x = origin
-        cutout = data[np.int(x - width / 2.):np.int(x + width / 2.),
-                      np.int(y - width / 2.):np.int(y + width / 2.)]
+        cutout = data[int(x - width / 2.):int(x + width / 2.),
+                      int(y - width / 2.):int(y + width / 2.)]
         return cutout
 
     def _mask_noise(self, data, noise_mean, noise_std, threshold_sigma=3.0):
@@ -353,10 +353,10 @@ class TimeSeriesAnalysis:
 
             # Create the mask that will be used to remove the target from DAOSTAR algorithm.
             target_mask = np.zeros(data.shape, dtype=bool)
-            target_mask[np.int(x_cen - self._centroid_box / 2.):
-                        np.int(x_cen + self._centroid_box / 2.),
-                        np.int(y_cen - self._centroid_box / 2.):
-                        np.int(y_cen + self._centroid_box / 2.)] = True
+            target_mask[int(x_cen - self._centroid_box / 2.):
+                        int(x_cen + self._centroid_box / 2.),
+                        int(y_cen - self._centroid_box / 2.):
+                        int(y_cen + self._centroid_box / 2.)] = True
 
             # We clipped and clean the background to leave the stars only
             mean, median, std = sigma_clipped_stats(data, sigma=3.0)
@@ -606,10 +606,10 @@ class TimeSeriesAnalysis:
         sl = self.r
         pr = 5
         for nd in nddatas:
-            projection_x = nd.data[np.int((x_cen - sl)):np.int(2.3 * (x_cen + sl)),
-                                   np.int(y_cen - pr):np.int(y_cen + pr)]
-            projection_y = nd.data[np.int(x_cen - pr):np.int(x_cen + pr),
-                                   np.int((y_cen - sl)):np.int(2.3 * (y_cen + sl))]
+            projection_x = nd.data[int((x_cen - sl)):int(2.3 * (x_cen + sl)),
+                                   int(y_cen - pr):int(y_cen + pr)]
+            projection_y = nd.data[int(x_cen - pr):int(x_cen + pr),
+                                   int((y_cen - sl)):int(2.3 * (y_cen + sl))]
             projection_x = np.mean(projection_x, axis=1)
             projection_y = np.mean(projection_y, axis=0)
 
@@ -986,8 +986,8 @@ class TimeSeriesAnalysis:
 
                 # Filter and choose the pixels only in the middle region of the cutout.
                 mask = np.zeros(cutout.shape, dtype=bool)
-                mask[np.int(x_cen - mid_point):np.int(x_cen + mid_point),
-                     np.int(y_cen - mid_point):np.int(y_cen + mid_point)] = True
+                mask[int(x_cen - mid_point):int(x_cen + mid_point),
+                     int(y_cen - mid_point):int(y_cen + mid_point)] = True
 
                 # Recalculate the centroid for the selected area to improve precision.
                 new_x_cen, new_y_cen = self._estimate_centroid_via_2dgaussian(cutout, mask=~mask)
@@ -1128,8 +1128,8 @@ class TimeSeriesAnalysis:
 
                 # Filter and choose the pixels only in the middle region of the cutout.
                 mask = np.zeros(cutout.shape, dtype=bool)
-                mask[np.int(x_cen - mid_point):np.int(x_cen + mid_point),
-                     np.int(y_cen - mid_point):np.int(y_cen + mid_point)] = True
+                mask[int(x_cen - mid_point):int(x_cen + mid_point),
+                     int(y_cen - mid_point):int(y_cen + mid_point)] = True
 
                 # Recalculate the centroid for the selected area to improve precision.
                 new_x_cen, new_y_cen = self._estimate_centroid_via_2dgaussian(cutout, mask=~mask)
