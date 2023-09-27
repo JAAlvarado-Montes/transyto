@@ -47,7 +47,7 @@ def find_input(url, verbose=False):
         i += 1
 
 
-def find_observatory(observatory='', url='https://astro.swarthmore.edu/transits/transits.cgi'):
+def find_observatory(observatory='', url='https://astro.swarthmore.edu/transits/'):
     """Look for available observatories
 
     Parameters
@@ -91,7 +91,7 @@ def find_observatory(observatory='', url='https://astro.swarthmore.edu/transits/
             continue
 
 
-def configure_transit_finder(url='https://astro.swarthmore.edu/transits/transits.cgi',
+def configure_transit_finder(url='https://astro.swarthmore.edu/transits/',
                              database='exoplanets', starting_date='today', days_to_print=1,
                              days_in_past=0, min_start_elevation=30, elevation_conector='or',
                              min_end_elevation=30, min_transit_depth=5, max_magnitude=11,
