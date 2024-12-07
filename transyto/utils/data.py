@@ -13,7 +13,7 @@ from contextlib import suppress
 
 
 class Data:
-    def __init__(self, filenames_path):
+    def __init__(self, filenames_path, file_search_pattern='*.fit*'):
         """Initialize data for reduction.
 
         Parameters
@@ -22,6 +22,7 @@ class Data:
             Top level path of .fits files to search for stars.
         """
         self.filenames_path = filenames_path
+        self.file_search_pattern = file_search_pattern
 
     @staticmethod
     def safe_load_ccdproc(fname, data_type):
@@ -104,7 +105,7 @@ class Data:
 
         # Combine the file list to get the master data using any method
         combine(filenames_list, output_filename, method=method, scale=scale,
-                combine_uncertainty_function=np.ma.std, unit='adu')
+                combine_uncertainty_function=np.ma.std, unit='adu', **kwargs)
 
         # Print path of the master created
         print(f'CREATED (using {method}): {output_filename}\n')
@@ -138,20 +139,22 @@ class Data:
         with tempfile.TemporaryDirectory() as tmp_directory:
 
             # Create and charge masterdark
-            darks_list = search_files_across_directories(darks_directory, '*.fit*')
+            darks_list = search_files_across_directories(darks_directory, self.file_search_pattern)
             masterdark = self.create_master_image_stack(darks_list, 'masterdark.fits',
                                                         output_directory=tmp_directory)
             masterdark = self.safe_load_ccdproc(masterdark, 'adu')
 
             if flat_correction:
                 # Create and charge masterbias
-                bias_list = search_files_across_directories(bias_directory, '*.fit*')
+                bias_list = search_files_across_directories(bias_directory,
+                                                            self.file_search_pattern)
                 masterbias = self.create_master_image_stack(bias_list, 'masterbias.fits',
                                                             output_directory=tmp_directory)
                 masterbias = self.safe_load_ccdproc(masterbias, 'adu')
 
                 # Create and charge masterflat
-                flats_list = search_files_across_directories(flats_directory, '*.fit*')
+                flats_list = search_files_across_directories(flats_directory,
+                                                             self.file_search_pattern)
                 masterflat = self.create_master_image_stack(flats_list, 'masterflat.fits',
                                                             output_directory=tmp_directory)
                 masterflat = self.safe_load_ccdproc(masterflat, 'adu')
@@ -176,7 +179,8 @@ class Data:
             print('Starting data reduction process\n')
 
             # List of science exposures to clean
-            files_list = search_files_across_directories(self.filenames_path, '*fit*')
+            files_list = search_files_across_directories(self.filenames_path,
+                                                         self.file_search_pattern)
 
             # Output directory for files after reduction
             output_directory = self.filenames_path + 'Calibrated_data'

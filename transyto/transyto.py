@@ -75,7 +75,7 @@ class TimeSeriesAnalysis:
 
     def __init__(self, target_star='', data_directory='', search_pattern='*fit*',
                  from_coordinates=None, ra_target=None, dec_target=None,
-                 transit_times=[], telescope='', centroid_box=30):
+                 telescope='', centroid_box=30):
         """Initialize class Photometry for a given target and reference stars.
 
         Parameters
@@ -92,9 +92,6 @@ class TimeSeriesAnalysis:
             RA coords of target.
         dec_target : None, optional
             DEC of target.
-        transit_times : list, optional
-            Ingress, mid-transit, and egress time. In "isot" format.
-            Example: ["2021-07-27T15:42:00", "2021-07-27T17:06:00", "2021-07-27T18:29:00"]
         telescope : str, optional
             Name of the telescope where the data come from.
         centroid_box : int, optional
@@ -123,9 +120,6 @@ class TimeSeriesAnalysis:
         # RADEC of target and ref. stars if needed.
         self.ra_target = ra_target
         self.dec_target = dec_target
-
-        # Transit times of target star: ingress, mid-transit, and egress time.
-        self.transit_times = transit_times
 
         # Set possible positive answers to set some variables below.
         pos_answers = ['True', 'true', 'yes', 'y', 'Yes', True]
@@ -1296,16 +1290,43 @@ class LightCurve(TimeSeriesAnalysis):
 
     def __init__(self, target_star='', data_directory='', search_pattern='*.fit*',
                  from_coordinates=True, ra_target=None, dec_target=None,
-                 transit_times=[], telescope='', centroid_box=30):
+                 telescope='', centroid_box=30, transit_times=[]):
         super(LightCurve, self).__init__(target_star=target_star,
                                          data_directory=data_directory,
                                          search_pattern=search_pattern,
                                          from_coordinates=from_coordinates,
                                          ra_target=ra_target,
                                          dec_target=dec_target,
-                                         transit_times=transit_times,
                                          telescope=telescope,
-                                         centroid_box=centroid_box)
+                                         centroid_box=centroid_box,
+                                         transit_times=transit_times)
+        """Initialize class LightCurve for a given target and reference stars.
+
+            Parameters
+            ----------
+            star_id : str
+                Name of target star to do aperture photometry
+            data_directory : str
+                Top level path of .fits files to search for stars.
+            search_pattern : str
+                Pattern for searching files
+            from_coordinates : None, optional
+                Flag to find star by using its coordinates.
+            ra_target : None, optional
+                RA coords of target.
+            dec_target : None, optional
+                DEC of target.
+            transit_times : list, optional
+                Ingress, mid-transit, and egress time. In "isot" format.
+                Example: ["2021-07-27T15:42:00", "2021-07-27T17:06:00", "2021-07-27T18:29:00"]
+            telescope : str, optional
+                Name of the telescope where the data come from.
+            centroid_box : int, optional
+                Initial box to calculate centroid.
+            """
+
+        # Transit times of target star: ingress, mid-transit, and egress time.
+        self.transit_times = transit_times
 
     def clip_outliers(self, flux, sigma_lower=0, sigma_upper=0, **kwargs):
         """Clips out the outliers in flux.

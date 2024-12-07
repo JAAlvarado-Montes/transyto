@@ -47,17 +47,13 @@ def find_input(url, verbose=False):
         i += 1
 
 
-def find_observatory(observatory='', url='https://astro.swarthmore.edu/transits/'):
+def find_observatory(observatory_name=''):
     """Look for available observatories
 
     Parameters
     ----------
-    url : str, optional (default is swarthmore webpage)
-        Url of swarthmore webpage.
-    observatory : str, optional (default is "Siding")
+    observatory_name : str, optional (default is "Siding")
         String pattern to look for observatory.
-    verbose : bool, optional (default is False)
-        Show the whole list of options.
 
     Returns
     -------
@@ -65,8 +61,9 @@ def find_observatory(observatory='', url='https://astro.swarthmore.edu/transits/
         Index of observatory.
 
     """
+
     # finds the input tags in the HTML
-    bs = BeautifulSoup(show_html(url), 'html.parser')
+    bs = BeautifulSoup(show_html('https://astro.swarthmore.edu/transits/'), 'html.parser')
     search = bs.find_all('option')
     observatories = []
 
@@ -74,35 +71,33 @@ def find_observatory(observatory='', url='https://astro.swarthmore.edu/transits/
         obs = result['value'].split(';')[-1]
         obs = obs.split(',')[0]
 
-        if len(observatories) <= 71:
+        if len(observatories) <= 79:
             observatories.append(obs)
 
-    if not observatory:
+    if not observatory_name:
         for j, obs in enumerate(observatories):
             print(f'{j} {obs}\n')
 
-        observatory = input('Observatory not provided. Select one from the previous list: ')
+        observatory_name = input('Observatory not provided. Select one from the previous list: ')
 
     for i, obs in enumerate(observatories):
-        if observatory in obs:
+        if observatory_name in obs:
             outputs = namedtuple('outputs', 'idx name')
             return outputs(i, obs)
         else:
             continue
 
 
-def configure_transit_finder(url='https://astro.swarthmore.edu/transits/',
-                             database='exoplanets', starting_date='today', days_to_print=1,
+def configure_transit_finder(database='exoplanets', starting_date='today', days_to_print=1,
                              days_in_past=0, min_start_elevation=30, elevation_conector='or',
-                             min_end_elevation=30, min_transit_depth=5, max_magnitude=11,
-                             observatory=''):
+                             pre_pos_transit_baseline=1, min_end_elevation=30, min_transit_depth=5,
+                             max_magnitude=11, observatory_name='', observatory_latitude=None,
+                             observatory_longitude=None, manual_observatory=False):
     """Configure swarthmore webpage to look for transits.
 
     Parameters
     ----------
-    url : str, optional (default is Swarthmore webpage)
-        Swarthmore webpage to look for transits.
-    database: str, optional (default is 'exoplanets')
+    database : str, optional (default is 'exoplanets')
          The specific database to query
     starting_date : str, optional  (default is 'today')
         Starting date to look for transits. Either "today" or 'mm-dd-yyyy' (ex. '08-20-2021')
@@ -114,33 +109,51 @@ def configure_transit_finder(url='https://astro.swarthmore.edu/transits/',
         Minimum elevation at start of transit to look for transits.
     elevation_conector : str, optional (default is "or")
         Conditional for minimum and maximum elevation. It can be 'or' and 'and'
+    pre_pos_transit_baseline : int, optional
+        Description
     min_end_elevation : int, optional (default is 30)
         Minimum elevation at end of transit to look for transits.
     min_transit_depth : int, optional (default is 5)
         Minimum transit depth to filter transits.
     max_magnitude : int, optional (default is 11)
         Maximum stellar magnitude to filter transits.
-    observatory : str, optional (default is "Siding")
+    observatory_name : str, optional (default is "Siding")
         String pattern to look for observatory.
+    observatory_latitude : None, optional
+        Description
+    observatory_longitude : None, optional
+        Description
+    manual_observatory : bool, optional (defaul is "False")
+        flag to entry coordinates (LAT and LONG) of observatory
 
     Returns
     -------
     str
         Link to the CSV table for downloading.
-
     """
+
+    # find_input('https://astro.swarthmore.edu/transits/', verbose=True)
+    # exit()
 
     browser = mechanicalsoup.Browser()
 
-    page = browser.get(url)
+    page = browser.get('https://astro.swarthmore.edu/transits/')
 
     load_html = page.soup
 
     form = load_html.select('form')[0]
 
     # Select observatory
-    observatory = find_observatory(observatory=observatory)
+    observatory = find_observatory(observatory_name=observatory_name)
     form.select('option')[observatory.idx]['selected'] = 'selected'
+
+    if manual_observatory:
+        # Set the observatory's latitude and longitude
+        form.select('input')[13]['value'] = observatory_latitude
+        form.select('input')[14]['value'] = observatory_longitude
+
+        # Fix observatory's timezone to UTC
+        form.select('option')[80]['selected'] = 'selected'
 
     # Target List
     db_flag = 0
@@ -162,6 +175,9 @@ def configure_transit_finder(url='https://astro.swarthmore.edu/transits/',
 
     # Minimum start elevation
     form.select('input')[18]['value'] = min_start_elevation
+
+    # Baseline hours pre(post) transit
+    form.select('input')[25]['value'] = pre_pos_transit_baseline
 
     # And/or
     form.select('input')[19]['value'] = elevation_conector

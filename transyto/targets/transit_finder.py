@@ -23,17 +23,23 @@ from transyto.targets.swarthmore import configure_transit_finder, find_observato
 from transyto.utils import set_xaxis_limits
 
 
-def filter_transit_observations(observatory='', utc_offset=0, cov_threshold=80,
+def filter_transit_observations(observatory_name='', observatory_latitude='',
+                                observatory_longitude='', utc_offset=0, cov_threshold=80,
                                 days_to_print=5, days_in_past=0, save_tables=False,
-                                output_directory='./', starting_date='today', min_start_elevation=30,
+                                output_directory='./', starting_date='today',
+                                pre_pos_transit_baseline=1, min_start_elevation=30,
                                 elevation_conector='or', min_end_elevation=30, min_transit_depth=5,
-                                max_magnitude=11):
+                                max_magnitude=11, manual_observatory=False, **kwargs):
     """Filter and plot transits for a given observatory using different criteria (see below).
 
     Parameters
     ----------
-    observatory : str, optional (default is empty)
-        String pattern to look for observatory.
+    observatory_name : str, optional
+        Description
+    observatory_latitude : str, optional
+        Description
+    observatory_longitude : str, optional
+        Description
     utc_offset : int, optional (default is 0)
         Time offset to calculate the local time from UTC. Ex: Sydney/Australia is UTC + 10
     cov_threshold : int, optional (default is 80)
@@ -48,6 +54,8 @@ def filter_transit_observations(observatory='', utc_offset=0, cov_threshold=80,
         Ouput directory to save tables and plots.
     starting_date : str, optional  (default is "today")
         Starting date to look for transits. Either "today" or "mm-dd-yyyy" (ex. "08-20-2021")
+    pre_pos_transit_baseline : int, optional
+        Description
     min_start_elevation : int, optional (default is 30)
         Minimum elevation at start of transit to look for transits.
     elevation_conector : str, optional (default is "or")
@@ -55,20 +63,24 @@ def filter_transit_observations(observatory='', utc_offset=0, cov_threshold=80,
     min_end_elevation : int, optional (default is 30)
         Minimum elevation at end of transit to look for transits.
     min_transit_depth : int, optional (default is 5)
-        Minimum transit depth to filter transits.
+        Minimum transit depth to filter transits in ppt
     max_magnitude : int, optional (default is 11)
         Maximum stellar magnitude to filter transits.
+    manual_observatory : bool, optional
+        Description
+    **kwargs
+        Description
     """
+
+    print(f'\nExtracting tables for exoplanets and tois, using the variables:\n {locals()}\n')
 
     # Configure the transit finder webpage (swarthmore) to get the transits of exoplaneta and
     # tois rom CSV tables.
-    if not observatory:
-        observatory = find_observatory(observatory=observatory)
+    if not observatory_name:
+        observatory = find_observatory(observatory_name=observatory_name)
         observatory_name = observatory.name
     else:
-        observatory_name = observatory
-
-    print(f'\nDownloading CSV tables for exoplanets and tois, using the variables:\n {locals()}\n')
+        observatory_name = observatory_name
 
     planets_file = configure_transit_finder(days_to_print=days_to_print,
                                             days_in_past=days_in_past, starting_date=starting_date,
@@ -76,8 +88,12 @@ def filter_transit_observations(observatory='', utc_offset=0, cov_threshold=80,
                                             elevation_conector=elevation_conector,
                                             min_end_elevation=min_end_elevation,
                                             min_transit_depth=min_transit_depth,
+                                            pre_pos_transit_baseline=pre_pos_transit_baseline,
                                             max_magnitude=max_magnitude,
-                                            observatory=observatory_name,
+                                            observatory_name=observatory_name,
+                                            observatory_latitude='',
+                                            observatory_longitude='',
+                                            manual_observatory=manual_observatory,
                                             database='exoplanets', )
 
     tois_file = configure_transit_finder(days_to_print=days_to_print,
@@ -86,8 +102,12 @@ def filter_transit_observations(observatory='', utc_offset=0, cov_threshold=80,
                                          elevation_conector=elevation_conector,
                                          min_end_elevation=min_end_elevation,
                                          min_transit_depth=min_transit_depth,
+                                         pre_pos_transit_baseline=pre_pos_transit_baseline,
                                          max_magnitude=max_magnitude,
-                                         observatory=observatory_name,
+                                         observatory_name=observatory_name,
+                                         observatory_latitude='',
+                                         observatory_longitude='',
+                                         manual_observatory=manual_observatory,
                                          database='tois')
 
     # Check if output directory was provided and if not then ask for path.
@@ -248,7 +268,7 @@ def filter_transit_observations(observatory='', utc_offset=0, cov_threshold=80,
                             obj_label = f'toi {toi}'
                             mag_label = 'T'
 
-                        print(obj_label, obs_time, end_time)
+                        print('\n', obj_label, obs_time, end_time)
 
                         # Append al collected data to be used in the table of each plot.
                         data.append((perc, f'{mag_label} {mag:.1f}', duration, f'{depth * 1000:.1f}',

@@ -1,43 +1,47 @@
 from transyto.utils import search_files_across_directories, get_header
 from astropy.wcs import WCS
+from astropy.io import fits
 
 from warnings import warn
 
 import os
 import subprocess
+import numpy as np
 
 
-def plate_solve_frame(filenames_path, timeout=100, solve_opts=None,
-                      replace=True, remove_extras=True,
-                      skip_solved=True, verbose=True, **kwargs):
-    """Plate solves an image.
+def plate_solve_frame(filenames_path, timeout=100, solve_opts=None, replace=True, skip_solved=True,
+                      remove_extras=True, verbose=True, compute_wcs_uncertainty=True,
+                      file_search_pattern='*.fit*', **kwargs):
+    """Plate solve an image.
 
     Parameters
     ----------
-    fits_file: string or list
-        Filename to solve in .fits extension.
-    timeout: int, optional
+    filenames_path : TYPE
+        Description
+    timeout : int, optional
         Timeout for the solve-field command. Default 1200 seconds.
-    verbose: boolean, optional
-        Show output, defaults to False. Default True.
-    solve_opts: list, optional
+    solve_opts : list, optional
         List of options for solve-field. Default True.
-    replace: boolean, optional
+    replace : boolean, optional
         Replace the unsolved file by the solved one. Default True.
-    remove_extras: boolean, optional
-        Remoce extra files produced by solve-field. Default True.
-    skip_solved: boolean, optional
+    skip_solved : boolean, optional
         If file is solved then skip it. Defaul True.
-    verbose: boolean, optional
+    remove_extras : boolean, optional
+        Remoce extra files produced by solve-field. Default True.
+    verbose : boolean, optional
         Show process by solve-field. Defaul True.
-    **kwargs: Description
+    compute_wcs_uncertainty : bool, optional
+        Description
+    file_search_pattern : str, optional
+        Description
+    **kwargs
+        Description
 
     Returns
     -------
     list: All the pathnames of solved files.
-
     """
-    files_list = search_files_across_directories(filenames_path, '*.fit*')
+    files_list = search_files_across_directories(filenames_path, file_search_pattern)
 
     for fname in files_list:
 
@@ -66,17 +70,18 @@ def plate_solve_frame(filenames_path, timeout=100, solve_opts=None,
         if verbose:
             print('Entering solve_field...')
 
-        # solve_field_script = os.path.join(os.getenv(''), 'scripts', 'solve_field.sh')
         solve_field_script = 'solve-field'
-
-        # solve_field_script = os.system(solve_field_script)
-
-        # print(f"{solve_field_script}")
-        # exit(0)
 
         # if not os.path.exists(solve_field_script):  # pragma: no cover
         #     raise error.InvalidSystemCommand(
         #         "Can't find solve-field: {}".format(solve_field_script))
+
+        if compute_wcs_uncertainty:
+            # Set name for correlation file
+            corr_filename = f'corr_{os.path.splitext(os.path.basename(fname))[0]}.fits'
+            corr_filepath = os.path.join(os.path.dirname(fname), corr_filename)
+        else:
+            corr_filepath = 'none'
 
         # Add the options for solving the field
         if solve_opts is not None:
@@ -89,7 +94,7 @@ def plate_solve_frame(filenames_path, timeout=100, solve_opts=None,
                 '--no-plots',
                 '--crpix-center',
                 '--match', 'none',
-                '--corr', 'none',
+                '--corr', corr_filepath,
                 '--wcs', 'none',
                 '--downsample', '4',
             ]
@@ -156,4 +161,60 @@ def plate_solve_frame(filenames_path, timeout=100, solve_opts=None,
         except Exception as e:
             warn('Cannot remove extra files: {}'.format(e))
 
+        try:
+            if compute_wcs_uncertainty:
+                compute_wcs_delta(fname, corr_filepath, **kwargs)
+            else:
+                pass
+        except Exception as e:
+            warn('WCS delta cannot be computed: {}'.format(e))
+
     return files_list
+
+
+def compute_wcs_delta(filename, corr_filepath, remove_corr_file=True, focal_length=None,
+                      pixel_size_keyword='XPIXSZ', **kwargs):
+    """Summary
+
+    Parameters
+    ----------
+    filename : str
+        Name (path) of original fits file
+    corr_filepath : str
+        Name (path) of correlation fits file from astrometry
+    remove_corr_file : bool, optional
+        Flag to remove correlation file. Default True
+    focal_length : None, optional
+        Focal length of the telescope (in mm) used for the observations. Default None
+    pixel_size_keyword : str, optional
+        String of the header keyword that contains the pixel size information. Defaul 'XPIXSZ'
+    **kwargs
+        Description
+    """
+    # Get the pixel size from header (in microns)
+    header = get_header(filename)
+    pixel_size = header[pixel_size_keyword]
+
+    # Get pixel size in arcsec
+    arcsec_pix = 206.265 * (pixel_size / focal_length)
+
+    try:
+        # Calculate the astrometric uncertainty in RA and DEC
+        tbl = fits.open(f'{corr_filepath}')[1].data
+        rmserr = np.sqrt(np.mean((tbl.index_x - tbl.field_x)**2
+                                 + (tbl.index_y - tbl.field_y)**2))
+
+        # Convert rmserr to arcsec
+        rmserr = rmserr * arcsec_pix
+
+        # Write astrometric uncertainty to file's header
+        fits.setval(filename, 'WCSDELTA', value=float(f'{rmserr:.20f}'),
+                    comment='Astrometric Uncertainty in RA and DEC (arcsec)', before='WCSAXES')
+    except Exception as e:
+        warn('WCS delta cannot be computed: {}'.format(e))
+    try:
+        if remove_corr_file:
+            os.remove(corr_filepath)
+
+    except Exception as e:
+        warn('Cannot remove correlation file: {}'.format(e))
